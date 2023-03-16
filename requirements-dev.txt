@@ -1,0 +1,14 @@
+-e .
+black
+build
+lap
+lapjv
+lapsolver
+numpy
+matplotlib
+mypy
+pylint
+scipy
+tqdm
+types-tqdm
+twine
