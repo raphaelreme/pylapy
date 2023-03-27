@@ -58,8 +58,8 @@ class LapSolver:  # pylint: disable=too-few-public-methods
     """
 
     implementations = {
-        "lap": "lap",
         "lapjv": "lapjv",
+        "lap": "lap",
         "scipy": "scipy.optimize",
         "lapsolver": "lapsolver",
     }
@@ -73,16 +73,13 @@ class LapSolver:  # pylint: disable=too-few-public-methods
             for imp, module in self.implementations.items():
                 try:
                     importlib.import_module(module)
-                    self.implementaiton = imp
+                    self.implementation = imp
                     break
                 except ImportError:
                     pass
             if self.implementation is None:
                 raise ImportError(
-                    f"""Unable to import any of the following implementations {self.implementations.items()}
-
-                    Please install one of them.
-                    """
+                    f"Unable to import any of the following implementations {tuple(self.implementations.items())}"
                 )
 
         self.shape_extension: Callable[[np.ndarray, float], np.ndarray] = smallest_fill_0

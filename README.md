@@ -7,7 +7,7 @@ Solves assignement problem with Hungarian algorithm (Jonker-Volgenant variants [
 This class is a wrapper around different implementations you can find in python: lap, lapjv, scipy, lapsolver [2, 3, 4, 5].
 
 It unifies the functionality of each implementation and allows you to use the one which is the fastest
-on your problem.
+on your problem. Note that to solve the same problem, an implementation/method can be more than 10 times slower than an other one.
 
 It also helps you to handle non square matrices and setting a soft threshold on assignements (usually leads
 to better performances than hard thresholding).
@@ -59,7 +59,7 @@ and dist extensions (for non square matrix or soft thresholding). We have only t
 and python 3.10. Thus we do not guarantee that the choice we make by default are the fastest for you. 
 
 ### TLDR
-Lapjv seems to usually outperforms other implementations (Up to 2 times faster). Lap and Scipy are also pretty fast and can sometimes be faster than Lapjv and can sometimes be faster. Lapsolver is usually much slower.
+Lapjv seems to usually outperform other implementations (Up to 2 times faster). Lap and Scipy are also pretty fast and can sometimes be faster than Lapjv. Lapsolver is usually much slower and should be avoided.
 
 To handle soft thresholding and non-square matrices, we use by default the fastest options of our benchmark. This can be changed by setting
 `LapSolver.cost_extension` and `LapSolver.shape_extension`.
@@ -106,9 +106,9 @@ Also you want to choose the fastest one for your problem. We have compared all i
 ![full_square_example](./benchmark/images/full_square.png) ![sparse_square](./benchmark/images/sparse_full_square.png) ![rectangular0.8](./benchmark/images/full_rectangular_0.8.png)
 ![rectangular1.2](./benchmark/images/full_rectangular_1.2.png)![cost_limit_full](./benchmark/images/partial_square.png)![cost_limit_sparse](./benchmark/images/sparse_partial_square.png)
 
-It seems that lapjv is usually slightly faster than other implementations. Scipy and lap are also pretty fast and can be faster than lapjv depending on your use case. Lapsolver is always outperformed and should be avoided.
+It seems that lapjv is usually faster than other implementations. Scipy and lap are also pretty fast and can be faster than lapjv depending on your use case. Lapsolver is always outperformed and should be avoided.
 
-We have also tested `lapmod` from lap for sparse matrices. It can sometimes be faster than other implementations but it is less stable and we do not add the support of this algorithm in the wrapper. (for unfeasible problems, it yields a segfault).
+We have also tested `lapmod` from lap [2] for sparse matrices. It can sometimes be faster than other implementations but it is less stable and we do not add the support of this algorithm in the wrapper. (Note that for unfeasible problems, it yields a segfault).
 
 Warning: For rectangular matrices, lapjv seems to sometimes output a non-optimal cost (though very close to the optimal one)
 
