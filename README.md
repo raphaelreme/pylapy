@@ -52,6 +52,66 @@ links = solver.solve(dist)
 print(dist[links[:, 0], links[:, 1]])
 ```
 
+## Benchmarks
+
+We provide several scripts (and corresponding plots) in the `benchmark/` folder. They compare different implementations
+and dist extensions (for non square matrix or soft thresholding). We have only tested them on a intel core i7 with Ubuntu 20.04
+and python 3.10. Thus we do not guarantee that the choice we make by default are the fastest for you. 
+
+### TLDR
+Lapjv seems to usually outperforms other implementations (Up to 2 times faster). Lap and Scipy are also pretty fast and can sometimes be faster than Lapjv and can sometimes be faster. Lapsolver is usually much slower.
+
+To handle soft thresholding and non-square matrices, we use by default the fastest options of our benchmark. This can be changed by setting
+`LapSolver.cost_extension` and `LapSolver.shape_extension`.
+
+
+### Handling non square matrices
+
+With a rectangular assignment problem, you have to extend the distance matrix into a square one. There are multiple ways
+to perform this shape extension. All yield the same final links and cost some are much faster/slower than others.
+
+We provide several shape extension functions and benchmark them. By default, the solver uses the fastest one for the implementation you use.
+You can build your own or enforce another one by setting the `LapSolver.shape_extension` attribute. Please have a look at
+`shape_extension` module and `benchmark_shape_extension` script for more details.
+
+![lap](./benchmark/images/shape_extension/lap.png) ![lapjv](./benchmark/images/shape_extension/lapjv.png) ![scipy](./benchmark/images/shape_extension/scipy.png)
+![lapsolver](./benchmark/images/shape_extension/lapsolver.png)
+
+According to our benchmark, we use `smallest_fill_inf` for scipy [4] and smallest_fill_0 for other implementations. (Note that lap [2] provide its own implementation displayed as `ref` here.)
+
+### Handling soft thresholding
+
+Rather than applying hard thresholding and cut links that are above a threshold `eta`, it is common and usually
+better to assign a row or a column to "no one" with a cost `eta`. This is done by adding "sink" rows and columns.
+When a true row/column is linked to a "sink" column/row, it is considered non linked.
+
+Adding these sink nodes can also be done multiple ways resulting in equivalent links/cost but different run time.
+We provide several cost extension functions and benchmark them. By default, the solver uses the expected fastest one
+for the implementation you use. You can build your own extension or enforce another one by setting the `LapSolver.cost_extension`
+attribute. Please have a look at `cost_extension` module and `benchmark_cost_extension` script for more details.
+
+![lap](./benchmark/images/cost_extension/lap.png) ![lapjv](./benchmark/images/cost_extension/lapjv.png) ![scipy](./benchmark/images/cost_extension/scipy.png)
+![lapsolver](./benchmark/images/cost_extension/lapsolver.png)
+
+It is less obvious to descriminate between the cost extension functions (Even more if you add sparsity: more plots in `benchmark/images/cost_extension`). Nonetheless,
+we decided to go with `diag_split_cost` for lapsolver [5] and `row_cost` for other implementations that usually leads to the best performances.
+
+### Choosing the implementations
+
+First, some implementations are not available on some operating system or python version, our wrapper allows you to switch between implementations without
+changing your code. It seems that for instance, lap is not available for python 3.6, lapjv is not available in macOs, etc.
+
+Also you want to choose the fastest one for your problem. We have compared all implementations on several cases (using sparsity, rectangular problems, and cost limit):
+
+![full_square_example](./benchmark/images/full_square.png) ![sparse_square](./benchmark/images/sparse_full_square.png) ![rectangular0.8](./benchmark/images/full_rectangular_0.8.png)
+![rectangular1.2](./benchmark/images/full_rectangular_1.2.png)![cost_limit_full](./benchmark/images/partial_square.png)![cost_limit_sparse](./benchmark/images/sparse_partial_square.png)
+
+It seems that lapjv is usually slightly faster than other implementations. Scipy and lap are also pretty fast and can be faster than lapjv depending on your use case. Lapsolver is always outperformed and should be avoided.
+
+We have also tested `lapmod` from lap for sparse matrices. It can sometimes be faster than other implementations but it is less stable and we do not add the support of this algorithm in the wrapper. (for unfeasible problems, it yields a segfault).
+
+Warning: For rectangular matrices, lapjv seems to sometimes output a non-optimal cost (though very close to the optimal one)
+
 ## References
 
 * [1] R. Jonker and A. Volgenant, "A Shortest Augmenting Path Algorithm for Dense and Sparse Linear Assignment Problems", Computing 38, 325-340 (1987)
