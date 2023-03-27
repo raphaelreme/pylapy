@@ -17,15 +17,6 @@ CORRECT_LINK_PROPORTION = False
 
 
 def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int, lapmod: bool):
-    # Check that all can be imported (and import all so that it does not imped the run time)
-    # pylint: disable=import-outside-toplevel, unused-import
-    import lap  # type: ignore
-    import lapjv  # type: ignore
-    import lapsolver  # type: ignore
-    import scipy.optimize  # type: ignore
-
-    # pylint: enable=import-outside-toplevel, unused-import
-
     solvers = {solver: pylapy.LapSolver(solver).solve for solver in pylapy.LapSolver.implementations}
 
     if lapmod:
