@@ -2,9 +2,9 @@
 
 [![Lint and Test](https://github.com/raphaelreme/pylapy/actions/workflows/tests.yml/badge.svg)](https://github.com/raphaelreme/pylapy/actions/workflows/tests.yml)
 
-Solves assignement problem with Hungarian algorithm (Jonker-Volgenant variants [1])
+We provide a solver for the assignement problem with Hungarian algorithm (Jonker-Volgenant variants [1])
 
-This class is a wrapper around different implementations you can find in python: lap, lapjv, scipy, lapsolver [2, 3, 4, 5].
+The main class (`pylapy.LapSolver`) is a wrapper around different implementations you can find in python: lap, lapjv, scipy, lapsolver [2, 3, 4, 5].
 
 It unifies the functionality of each implementation and allows you to use the one which is the fastest
 on your problem. Note that to solve the same problem, an implementation/method can be more than 10 times slower than an other one.
