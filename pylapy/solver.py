@@ -118,6 +118,10 @@ class LapSolver:  # pylint: disable=too-few-public-methods
         dist = dist.copy()
         n, m = dist.shape
 
+        # Handle 0 dimensions (Is almost handled by shape extension or/and backends but not fully)
+        if min(n, m) == 0:
+            return np.zeros((0, 2), dtype=np.uint16)
+
         # Replace inf as most lib do not support it well
         inf = dist[dist != np.inf].sum() + 1
         dist[dist == np.inf] = inf
