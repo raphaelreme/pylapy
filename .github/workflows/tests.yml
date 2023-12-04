@@ -9,13 +9,11 @@ on:
 
 jobs:
   main:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest]  # XXX: Suport for mac + windows linting ?
         python-version: ["3.7", "3.8", "3.9", "3.10"]
-        #os: [ubuntu-latest]
-        #python-version: [3.8]
 
     steps:
       - uses: actions/checkout@v3
@@ -48,3 +46,39 @@ jobs:
       # - name: pytest
       #   run: |
       #     pytest
+
+# If venv is required, split windows vs unix... But still non working...
+  # windows:
+  #   runs-on: windows-latest
+  #   strategy:
+  #     matrix:
+  #       python-version: ["3.7", "3.8", "3.9", "3.10"]
+
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Set up Python ${{ matrix.python-version }}
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+  #     # lap package installation is unstable and requires numpy, and moreover it does not work with the default env set up by github...
+  #     - name: Install dependencies [WINDOWS]
+  #       run: |
+  #         pip install --upgrade pip
+  #         pip install wheel
+  #         pip install numpy
+  #         python -m pip install -r requirements-dev.txt
+  #       #   python -m venv env
+  #       #   env/Scripts/activate
+  #     - name: pylint
+  #       run: |
+  #         pylint pylapy
+  #     - name: mypy
+  #       run: |
+  #         mypy pylapy
+  #     - name: black
+  #       run: |
+  #         black --check .
+  #     # TODO
+  #     # - name: pytest
+  #     #   run: |
+  #     #     pytest
