@@ -151,6 +151,8 @@ class LapSolver:  # pylint: disable=too-few-public-methods
     def _lap(dist: np.ndarray) -> np.ndarray:
         """Solve with lap (https://github.com/gatagat/lap)
 
+        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx.
+
         You should not call this method directly. To enforce using lap,
         rather set `implem` attribute to "lap" and call `solve`.
 
@@ -224,7 +226,7 @@ class LapSolver:  # pylint: disable=too-few-public-methods
 
     @staticmethod
     def _lapsolver(dist: np.ndarray) -> np.ndarray:
-        """Solve with lapjv (https://github.com/src-d/lapjv)
+        """Solve with lapsolver (https://github.com/cheind/py-lapsolver)
 
         You should not call this method directly. To enforce using lapsolver,
         rather set `implem` attribute to "lapsolver" and call `solve`.

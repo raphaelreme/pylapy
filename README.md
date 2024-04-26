@@ -12,6 +12,8 @@ on your problem. Note that to solve the same problem, an implementation/method c
 It also helps you to handle non square matrices and setting a soft threshold on assignements (usually leads
 to better performances than hard thresholding).
 
+We provide some benchmark (but they are a bit hard to read and messy). Given your lap problem, try to make it work with the simplest implementation (scipy) and then (if needed) try to install lap or lapjv and see if they yield better computational performances.
+
 
 ## Install
 
@@ -20,10 +22,12 @@ $ pip install pylapy
 $ # By default it does not install any backend solver
 $ # You can either install by hand your favorite solver (scipy, lap, lapjv, lapsolver)
 $ pip install pylapy[scipy]  # or pylapy[lap] etc
-$ # Note that some backend requires numpy to be installed correctly
+$ # Note that some backend requires numpy to be installed correctly [for instance, the old lap distribution]
 $ # You may need to install numpy before
 $ pip install numpy
 ```
+
+As of today, lapjv do not support macos, lapsolver do not support python > 3.10. We now use [lapx](https://github.com/rathaROG/lapx) which distributes correctly the lap package.
 
 
 ## Getting started
@@ -115,7 +119,7 @@ Warning: For rectangular matrices, lapjv seems to sometimes output a non-optimal
 ## References
 
 * [1] R. Jonker and A. Volgenant, "A Shortest Augmenting Path Algorithm for Dense and Sparse Linear Assignment Problems", Computing 38, 325-340 (1987)
-* [2] "lap: Linear Assignment Problem solver", https://github.com/gatagat/lap
+* [2] "lap: Linear Assignment Problem solver", https://github.com/gatagat/lap (Now maintained at https://github.com/rathaROG/lapx)
 * [3] "lapjv: Linear Assignment Problem solver using Jonker-Volgenant algorithm", https://github.com/src-d/lapjv
 * [4] "scipy: linear_sum_assignment", https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html#scipy.optimize.linear_sum_assignment
 * [5] "py-lapsolver", https://github.com/cheind/py-lapsolver

@@ -10,78 +10,57 @@ on:
     - cron:  '45 14 10 * *'  # Program linting every 10th of each month at 14:45
 
 jobs:
-  main:
+  install:  # Check installation works on each os/python
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]  # XXX: Suport for mac + windows linting ?
+        os: [ubuntu-latest, macos-13, windows-latest]  # Has to use macos-13 until latest supports python < 3.10
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
-
     steps:
+      - name: Set git to use LF
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
       - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      # This is a mess because these packages are not very well supported
-      # lap package installation is unstable and requires numpy, and moreover it does not work with the default env set up by github...
       - name: Install dependencies
         run: |
-          python -m venv env
-          source env/bin/activate
-          pip install --upgrade pip
-          pip install wheel
-          pip install numpy
-          python -m pip install -r requirements-dev.txt
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Install scipy  # Works on each os/python
+        run: pip install scipy
+      - name: Install lap  # Works on each os/python (With lapx instead of lap)
+        run: pip install lapx
+      - name: Install lapjv  # Do not work on macos
+        if: ${{ matrix.os != 'macos-13' }}
+        run: pip install lapjv
+      - name: Install lapsolver  # Do not work on python > 3.11 (and 3.10 for windows....)
+        if: ${{ matrix.python-version != 3.11 && matrix.python-version != 3.12 && !(matrix.os == 'windows-latest' && matrix.python-version == 3.10) }}
+        run: pip install lapsolver
+
+  lint:  # Lint on a specific os/python version where everyone is installed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install scipy lapx lapjv lapsolver
       - name: pylint
-        run: |
-          source env/bin/activate
-          pylint pylapy
+        run: pylint pylapy
       - name: mypy
-        run: |
-          source env/bin/activate
-          mypy pylapy
+        run: mypy pylapy
       - name: black
-        run: |
-          source env/bin/activate
-          black --check .
+        run: black --check .
       # TODO
       # - name: pytest
       #   run: |
       #     pytest
-
-# If venv is required, split windows vs unix... But still non working...
-  # windows:
-  #   runs-on: windows-latest
-  #   strategy:
-  #     matrix:
-  #       python-version: ["3.7", "3.8", "3.9", "3.10"]
-
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - name: Set up Python ${{ matrix.python-version }}
-  #       uses: actions/setup-python@v4
-  #       with:
-  #         python-version: ${{ matrix.python-version }}
-  #     # lap package installation is unstable and requires numpy, and moreover it does not work with the default env set up by github...
-  #     - name: Install dependencies [WINDOWS]
-  #       run: |
-  #         pip install --upgrade pip
-  #         pip install wheel
-  #         pip install numpy
-  #         python -m pip install -r requirements-dev.txt
-  #       #   python -m venv env
-  #       #   env/Scripts/activate
-  #     - name: pylint
-  #       run: |
-  #         pylint pylapy
-  #     - name: mypy
-  #       run: |
-  #         mypy pylapy
-  #     - name: black
-  #       run: |
-  #         black --check .
-  #     # TODO
-  #     # - name: pytest
-  #     #   run: |
-  #     #     pytest

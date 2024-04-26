@@ -84,7 +84,7 @@ def lap_own_extend(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
 
     Faster without extension (same as ours but without the wrapper) in low dimensions
     Slower in high dimension (n > 1000) with eta extension
-    Much slower if n != m (They much extend more than required)
+    Much slower if n != m (They extend much more than required)
     """
     import lap  # type: ignore # pylint: disable=import-outside-toplevel
 
