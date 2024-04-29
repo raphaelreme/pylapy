@@ -89,11 +89,28 @@ def lap_own_extend(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
     import lap  # type: ignore # pylint: disable=import-outside-toplevel
 
     n, m = dist.shape
+
+    # Handle 0 dimensions (Is almost handled by shape extension or/and backends but not fully)
+    if min(n, m) == 0:
+        return np.zeros((0, 2), dtype=np.uint16)
+
     extend_cost = n != m or not np.isinf(eta)
+
+    # Lap do not work with inf value
+    # Let's replace them
+    dist = dist.copy()
+
+    inf = dist[dist != np.inf].sum() + 1
+    dist[dist == np.inf] = inf
 
     _, x, _ = lap.lapjv(dist, extend_cost=extend_cost, cost_limit=eta)
     i = np.arange(x.shape[0])[x != -1]
-    j = x[x != -1]
+    j = x[x != -1]  # -1 handles eta
+
+    # Filter out inf links
+    valid_links = dist[i, j] < inf
+    i, j = i[valid_links], j[valid_links]
+
     links = np.array([i, j], dtype=np.uint16).transpose()
 
     return links

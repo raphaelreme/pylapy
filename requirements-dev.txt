@@ -1,9 +1,11 @@
 -e .
 black
 build
-numpy
 matplotlib
 mypy
+numba
+numpy
+opencv-python
 pylint
 tqdm
 types-tqdm
