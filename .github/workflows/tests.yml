@@ -14,8 +14,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-13, windows-latest]  # Has to use macos-13 until latest supports python < 3.10
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+        exclude:  # Python < v3.8 does not support Apple Silicon ARM64.
+          - python-version: "3.7"
+            os: macos-latest
+        include:  # So run those legacy versions on Intel CPUs.
+          - python-version: "3.7"
+            os: macos-13
+
     steps:
       - name: Set git to use LF
         run: |
@@ -35,10 +42,10 @@ jobs:
       - name: Install lap  # Works on each os/python (With lapx instead of lap)
         run: pip install lapx
       - name: Install lapjv  # Do not work on macos and have to use <1.3.25 for python < 3.9
-        if: ${{ matrix.os != 'macos-13' && matrix.python-version != 3.8 && matrix.python-version != 3.7 }}
-        run: pip install lapjv
+        if: ${{ !startsWith(matrix.os, 'macos') && matrix.python-version != 3.8 && matrix.python-version != 3.7 }}
+        run: pip install lapjv==1.3.25  # 1.3.26 seems broken on python3.12 (https://github.com/src-d/lapjv/issues/88)
       - name: Install lapjv
-        if: ${{ matrix.os != 'macos-13' && (matrix.python-version == 3.8 || matrix.python-version == 3.7) }}
+        if: ${{ !startsWith(matrix.os, 'macos') && (matrix.python-version == 3.8 || matrix.python-version == 3.7) }}
         run: pip install "lapjv<1.3.25"
       - name: Install lapsolver  # Do not work on python > 3.11 (and 3.10 for windows....)
         if: ${{ matrix.python-version != 3.11 && matrix.python-version != 3.12 && !(matrix.os == 'windows-latest' && matrix.python-version == 3.10) }}
