@@ -43,7 +43,7 @@ jobs:
         run: pip install lapx
       - name: Install lapjv  # Do not work on macos and have to use <1.3.25 for python < 3.9
         if: ${{ !startsWith(matrix.os, 'macos') && matrix.python-version != 3.8 && matrix.python-version != 3.7 }}
-        run: pip install lapjv==1.3.25  # 1.3.26 seems broken on python3.12 (https://github.com/src-d/lapjv/issues/88)
+        run: pip install lapjv
       - name: Install lapjv
         if: ${{ !startsWith(matrix.os, 'macos') && (matrix.python-version == 3.8 || matrix.python-version == 3.7) }}
         run: pip install "lapjv<1.3.25"
