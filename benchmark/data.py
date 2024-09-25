@@ -3,9 +3,6 @@ import cv2
 import matplotlib.pyplot as plt  # type: ignore
 
 
-PLOT = False
-
-
 def generate(n: int, m: int, sparsity=0.0) -> np.ndarray:
     """Generate a (n, m) dist matrix with optional sparsity
 
@@ -42,7 +39,7 @@ def experimental_generate(n: int, fa=0.0, md=0.0, space_size=1, area_ratio=0.5, 
         md (float): Number of missed detections
             Default: 0.0
         space_size (int): Size of the 2D space
-            Default: 1000
+            Default: 1
         area_ratio (float): Controls how much particles cover the 2d space
             Default: 0.3
         hard_thresh (float): Distance is inf if it is beyond hard_thresh
@@ -58,22 +55,6 @@ def experimental_generate(n: int, fa=0.0, md=0.0, space_size=1, area_ratio=0.5, 
     # We fix the area of space (space **2) to be equal to the area of particles motions (~ n * pi* std**2) times a ratio
     new_points = points + np.random.randn(n, 2) * space_size * np.sqrt(area_ratio / n / np.pi)
 
-    if PLOT:
-        image = np.zeros((1000, 1000, 3), dtype=np.uint8)
-
-        scale = 1000 / space_size
-
-        for i in range(n):
-            source = (points[i] * scale).round().astype(np.int32)
-            dest = (new_points[i] * scale).round().astype(np.int32)
-            cv2.circle(image, source, 5, (255, 255, 255), -1)
-            cv2.circle(image, dest, 3, (255, 0, 0), -1)
-            cv2.line(image, source, dest, (0, 0, 255), 2)
-
-        plt.figure(figsize=(24, 16))
-        plt.imshow(image)
-        plt.show()
-
     # Lost points:
     new_points = new_points[: None if -int(n * md) >= 0 else -int(n * md)]
 
@@ -88,3 +69,27 @@ def experimental_generate(n: int, fa=0.0, md=0.0, space_size=1, area_ratio=0.5, 
     # dist[dist > np.quantile(dist, 1 - sparsity)] = np.inf
 
     return dist
+
+
+def plot_experimental_generate(n: int, space_size=1, area_ratio=0.5):
+    """Plot the generated 2D space by `experimental_generate`"""
+    points = np.random.uniform(0, space_size, (n, 2))  # random points on the 2d space
+
+    # Let's move them by a random deplacement
+    # We fix the area of space (space **2) to be equal to the area of particles motions (~ n * pi* std**2) times a ratio
+    new_points = points + np.random.randn(n, 2) * space_size * np.sqrt(area_ratio / n / np.pi)
+
+    image = np.zeros((1000, 1000, 3), dtype=np.uint8)
+
+    scale = 1000 / space_size
+
+    for i in range(n):
+        source = (points[i] * scale).round().astype(np.int32)
+        dest = (new_points[i] * scale).round().astype(np.int32)
+        cv2.circle(image, source, 5, (255, 255, 255), -1)
+        cv2.circle(image, dest, 3, (255, 0, 0), -1)
+        cv2.line(image, source, dest, (0, 0, 255), 2)
+
+    plt.figure(figsize=(24, 16))
+    plt.imshow(image)
+    plt.show()

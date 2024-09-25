@@ -45,7 +45,8 @@ def lap_sparse_solve(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
     cannot be linked to any columns.
 
     We also pay the conversion time from non-sparse to sparse.
-    # NOTE: Could be added to the LapSolver ?
+
+    # XXX: This is now way better implemented in sparse_solve. Should not be used any longer
     """
     import lap  # type: ignore # pylint: disable=import-outside-toplevel
 

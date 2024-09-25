@@ -2,9 +2,9 @@
 
 [![Lint and Test](https://github.com/raphaelreme/pylapy/actions/workflows/tests.yml/badge.svg)](https://github.com/raphaelreme/pylapy/actions/workflows/tests.yml)
 
-We provide a solver for the assignement problem with Hungarian algorithm (Jonker-Volgenant variants [1])
+We provide a solver for the assignement problem with Hungarian algorithm (Jonker-Volgenant variants [1]). It also supports sparse assignment problem.
 
-The main class (`pylapy.LapSolver`) is a wrapper around different implementations you can find in python: lap, lapjv, scipy, lapsolver [2, 3, 4, 5].
+The main class (`pylapy.LapSolver`) is a wrapper around different implementations you can find in python: lap (lapjv and lapmod), lapjv, scipy (linear_sum_assignment, csgraph), lapsolver [2, 3, 4, 5, 6].
 
 It unifies the functionality of each implementation and allows you to use the one which is the fastest
 on your problem. Note that to solve the same problem, an implementation/method can be more than 10 times slower than an other one.
@@ -19,12 +19,17 @@ We provide some benchmark (but they are a bit hard to read and messy). Given you
 
 ```bash
 $ pip install pylapy
+$
 $ # By default it does not install any backend solver
 $ # You can either install by hand your favorite solver (scipy, lap, lapjv, lapsolver)
 $ pip install pylapy[scipy]  # or pylapy[lap] etc
+$
 $ # Note that some backend requires numpy to be installed correctly [for instance, the old lap distribution]
 $ # You may need to install numpy before
 $ pip install numpy
+$
+$ # For sparse matrices, it requires scipy and numba.
+$ pip install pylapy[sparse]  # Will install pylapy with scipy and numba
 ```
 
 As of today:
@@ -47,12 +52,15 @@ sparsity = 0.5
 dist = np.random.uniform(0, 1, (2000, 2000))
 dist[np.random.uniform(0, 1, (2000, 2000)) < sparsity] = np.inf
 
-# Create the solver and solves
+# Create the solver and solve
 
 solver = pylapy.LapSolver()  # Choose the current most efficient method that is installed
 # solver = pylapy.LapSolver("scipy"|"lap"|"lapjv"|"lapsolver")  # You can choose which method you rather use
 
+
 links = solver.solve(dist)
+# Or if you have a threshold that removes most links
+links = solver.sparse_solve(dist, 0.1)
 
 # Find the final cost
 
@@ -70,6 +78,8 @@ Lapjv seems to usually outperform other implementations (Up to 2 times faster). 
 
 To handle soft thresholding and non-square matrices, we use by default the fastest options of our benchmark. This can be changed by setting
 `LapSolver.cost_extension` and `LapSolver.shape_extension`.
+
+When the cost is sparse, using `sparse_solve` may again give you a ten-fold speed increase. The fastest approach seems to be csgraph (from scipy), but lapmod (from lap) is not far behind. We use cost extension to handle infeasible problems, non-square ones and soft thresholding. By default, we use the fastest choice on our benchmark for each method. But for csgraph, with very sparse problems, it may be worth to use `LapSolver.sparse_extension` = "symmetric_cost".
 
 
 ### Handling non square matrices
@@ -103,6 +113,15 @@ attribute. Please have a look at `cost_extension` module and `benchmark_cost_ext
 It is less obvious to descriminate between the cost extension functions (Even more if you add sparsity: more plots in `benchmark/images/cost_extension`). Nonetheless,
 we decided to go with `diag_split_cost` for lapsolver [5] and `row_cost` for other implementations that usually leads to the best performances.
 
+### Handling sparse matrix
+
+When the cost is sparse (often true), the sparse algorithm from Jonker-Volgenant may be used. It is implemented in scipy.sparse.csgraph and lap.lapmod. These implementations do not support non-feasible matrix (where the maximum number of links is smaller than the number of rows and the number of columns). Moreover, lapmod only supports square matrices.
+
+To handle soft thresholding, feasibility and non-square matrices, we implemented sparse cost extensions, that extend the cost to a feasible sparse (and optionnally square) cost matrix. We defined 2 main methods that we benchmarked and we choose for each implementation the fastest one. For scipy, it seems that the other method could be faster when the matrix is extra sparse. You can change the extension or give one of your one by setting the `LapSolver.sparse_extension`. Please have a look at `sparse` module and `sparse_benchmark` script for more details.
+
+![hard](./benchmark/images/sparse/experiment_hard_thresholding.png) ![smooth](./benchmark/images/sparse/experiment_smooth_thresholding.png)
+
+
 ### Choosing the implementations
 
 First, some implementations are not available on some operating system or python version, our wrapper allows you to switch between implementations without
@@ -115,7 +134,7 @@ Also you want to choose the fastest one for your problem. We have compared all i
 
 It seems that lapjv is usually faster than other implementations. Scipy and lap are also pretty fast and can be faster than lapjv depending on your use case. Lapsolver is always outperformed and should be avoided.
 
-We have also tested `lapmod` from lap [2] for sparse matrices. It can sometimes be faster than other implementations but it is less stable and we do not add the support of this algorithm in the wrapper. (Note that for unfeasible problems, it yields a segfault).
+Note that lapmod on these figures is outdated, the current implementation on LapSovler.sparse_solve is much faster. See Handling sparse matrix for more details.
 
 Warning: For rectangular matrices, lapjv seems to sometimes output a non-optimal cost (though very close to the optimal one)
 
@@ -126,3 +145,4 @@ Warning: For rectangular matrices, lapjv seems to sometimes output a non-optimal
 * [3] "lapjv: Linear Assignment Problem solver using Jonker-Volgenant algorithm", https://github.com/src-d/lapjv
 * [4] "scipy: linear_sum_assignment", https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html#scipy.optimize.linear_sum_assignment
 * [5] "py-lapsolver", https://github.com/cheind/py-lapsolver
+* [6] "scipy: csgraph.min_weight_bipartite_matching", https://scipy.github.io/devdocs/reference/generated/scipy.sparse.csgraph.min_weight_full_bipartite_matching.html

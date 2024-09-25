@@ -1,5 +1,5 @@
 import importlib
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Union
 import warnings
 
 import numpy as np
@@ -12,6 +12,7 @@ class LapSolver:  # pylint: disable=too-few-public-methods
     """Solves assignement problem with Hungarian algorithm (JV variants)
 
     This class is a wrapper around different implementations: lapjv, lap, scipy, lapsolver.
+    It also supports sparse implementations: csgraph (scipy) and lapmod (lap).
 
     It unifies the functionality of each implementation and allows you to use the one which is the fastest
     on your problem.
@@ -63,9 +64,14 @@ class LapSolver:  # pylint: disable=too-few-public-methods
         "scipy": "scipy.optimize",
         "lapsolver": "lapsolver",
     }
+    sparse_implementations = {
+        "csgraph": "scipy.sparse.csgraph",
+        "lapmod": "lap",
+    }
 
-    def __init__(self, implementation: Optional[str] = None) -> None:
+    def __init__(self, implementation: Optional[str] = None, sparse_implementation: Optional[str] = None) -> None:
         self.implementation = implementation
+        self.sparse_implementation = sparse_implementation
 
         if self.implementation:
             importlib.import_module(self.implementations[self.implementation])
@@ -82,17 +88,31 @@ class LapSolver:  # pylint: disable=too-few-public-methods
                     f"Unable to import any of the following implementations {tuple(self.implementations.items())}"
                 )
 
+        if self.sparse_implementation:
+            importlib.import_module(self.sparse_implementations[self.sparse_implementation])
+        else:
+            for imp, module in self.sparse_implementations.items():
+                try:
+                    importlib.import_module(module)
+                    self.sparse_implementation = imp
+                    break
+                except ImportError:
+                    pass
+
         self.shape_extension: Callable[[np.ndarray, float], np.ndarray] = smallest_fill_0
         self.cost_extension: Callable[[np.ndarray, float, float], np.ndarray] = row_cost
+        self.sparse_extension: Union[str, Callable[[Any, float, bool], Any]] = "symmetric_cost"
 
         # For scipy and lapsolver the default ones are too slow. See benchmarks.
         if self.implementation == "scipy":
             self.shape_extension = smallest_fill_inf
         if self.implementation == "lapsolver":
             self.cost_extension = diag_split_cost
+        if self.sparse_implementation == "csgraph":  # Scipy supports non-square matrices and its faster
+            self.sparse_extension = "diag_row_cost"  # Note: symmetric can be faster with extra sparse problems
 
     def solve(self, dist: np.ndarray, eta=float("inf")) -> np.ndarray:
-        """Solve the assignement problem for the given distances
+        """Solve the assignment problem for the given distances
 
         Handle inf values by replacing them by the sum of all non inf values + 1 so that we only choose
         one when no other choice is possible.
@@ -147,6 +167,92 @@ class LapSolver:  # pylint: disable=too-few-public-methods
 
         return links
 
+    def sparse_solve(self, dist, eta: float, hard=False, feasible=False) -> np.ndarray:
+        """Solve a sparse linear assignment problem for the given distance
+
+        It will remove all links that are greater than `eta` to build a sparse cost matrix.
+
+        By default, `eta` is used as a soft threshold, which represents the cost of linking row i
+        or column j to "no one". This can be disabled to maximize the number of links no matter the
+        cost, using `hard=True`.
+
+        Typical implementation of sparse lapjv assumes that the matrix is squared, or at least fully
+        feasible (the maximum number of links is min(N, M)). This is usually not the case in real life
+        problems. In this code, we relax these assumptions, by extending the distance and adding "sink" nodes.
+
+        The distance matrix is extended for soft thresholding, or for hard thresholding if feasible is False.
+        By default, feasible is False and the distance is extended. It is up to the user to know if the input distance
+        is feasible without adding sink nodes (for instance with scipy.csgraph.maximum_bipartite_matching(csr)).
+
+        Links returned are only the valid links (no inf link nor link to "no one").
+
+        Args:
+            dist (Union[np.ndarray, scipy.sparse.spmatrix]): Distance matrix. If a sparse matrix is given
+                we do not check that elements are all below eta.
+                Shape: (N, M), dtype: float
+            eta (float): Cost limit (soft thresholding or hard thresholding)
+                No links will be made above this value. In soft thresholding, a link with a smaller value
+                can also be avoided if it allows to save more than eta in cost in thefull graph.
+            hard (bool): Do hard thresholding
+                Default: False (Soft thresholding with sink nodes)
+            feasible (bool): Whether the provided distance is fully feasible or not. (maximum number of links
+                is min(N, M)).
+                Default: False
+
+        Returns:
+            np.ndarray: Links (i, j)
+                Shape: (L, 2), dtype: uint16
+
+        """
+        if not self.sparse_implementation:
+            warnings.warn("No implementation found for sparse solving. Falling back to dense solving...")
+
+            if hard:
+                dist = np.array(dist)
+                dist[dist < eta] = np.inf
+                return self.solve(dist)
+
+            return self.solve(np.asarray(dist), eta)
+
+        # Scipy and numba are required
+        import scipy.sparse  # type: ignore  # pylint: disable=import-outside-toplevel
+        from . import sparse  # pylint: disable=import-outside-toplevel
+
+        n, m = dist.shape
+
+        if not hard or not feasible:
+            if callable(self.sparse_extension):
+                coo = self.sparse_extension(dist, eta, hard)  # pylint: disable=not-callable
+                if not scipy.sparse.issparse(coo):
+                    raise ValueError("The provided sparse_extension did not return a sparse matrix")
+
+                coo = coo.tocoo()
+            else:
+                coo = sparse.sparse_extension(dist, eta, hard, self.sparse_extension)
+        else:
+            if isinstance(dist, np.ndarray):
+                values, cols, rows = sparse.dense_to_coo(dist, eta)
+                coo = scipy.sparse.coo_matrix((np.array(values, dtype=np.float32), (rows, cols)), shape=(n, m))
+            elif scipy.sparse.issparse(dist):
+                coo = dist.tocoo()
+                if (coo.data > eta).any():  # Up to the user to handle this
+                    warnings.warn("Found some values greater than the cost limit in the sparse format")
+            else:
+                raise ValueError(f"Dist should be a numpy array or a scipy sparse matrix. Found {type(dist)}.")
+
+        coo.data += 0.1  # Add 0.1 to all values because 0 can be a tricky value
+
+        if len(coo.data) == 0:
+            return np.zeros((0, 2), dtype=np.uint16)
+
+        links = getattr(self, f"_{self.sparse_implementation}")(coo.tocsr())
+
+        # Filter links that are assigned outside of C
+        links = links[links[:, 0] < n]  # i < n
+        links = links[links[:, 1] < m]  # j < m
+
+        return links
+
     @staticmethod
     def _lap(dist: np.ndarray) -> np.ndarray:
         """Solve with lap (https://github.com/gatagat/lap)
@@ -154,7 +260,7 @@ class LapSolver:  # pylint: disable=too-few-public-methods
         Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx.
 
         You should not call this method directly. To enforce using lap,
-        rather set `implem` attribute to "lap" and call `solve`.
+        rather set `implementation` attribute to "lap" and call `solve`.
 
         Args:
             dist (np.ndarray): Dist matrix
@@ -185,7 +291,7 @@ class LapSolver:  # pylint: disable=too-few-public-methods
         """Solve with lapjv (https://github.com/src-d/lapjv)
 
         You should not call this method directly. To enforce using lapjv,
-        rather set `implem` attribute to "lapjv" and call `solve`.
+        rather set `implementation` attribute to "lapjv" and call `solve`.
 
         Args:
             dist (np.ndarray): Dist matrix
@@ -208,7 +314,7 @@ class LapSolver:  # pylint: disable=too-few-public-methods
         """Solve with scipy (scipy.optimize.linear_sum_assignment)
 
         You should not call this method directly. To enforce using scipy,
-        rather set `implem` attribute to "scipy" and call `solve`.
+        rather set `implementation` attribute to "scipy" and call `solve`.
 
         Args:
             dist (np.ndarray): Dist matrix
@@ -229,7 +335,7 @@ class LapSolver:  # pylint: disable=too-few-public-methods
         """Solve with lapsolver (https://github.com/cheind/py-lapsolver)
 
         You should not call this method directly. To enforce using lapsolver,
-        rather set `implem` attribute to "lapsolver" and call `solve`.
+        rather set `implementation` attribute to "lapsolver" and call `solve`.
 
         Args:
             dist (np.ndarray): Dist matrix
@@ -244,3 +350,57 @@ class LapSolver:  # pylint: disable=too-few-public-methods
         i, j = lapsolver.solve_dense(dist)
 
         return np.array([i, j], np.uint16).transpose()
+
+    @staticmethod
+    def _csgraph(dist) -> np.ndarray:
+        """Sparse solving with scipy (scipy.sparse.csgraph.min_weight_full_bipartite_matching)
+
+        You should not call this method directly. To enforce using csgraph,
+        rather set `sparse_implementation` attribute to "csgraph" and call `sparse_solve`.
+
+        Args:
+            dist (scipy.sparse.csr_matrix): Sparse dist matrix in the CSR format
+                Shape: (N, N), dtype: float
+
+        Returns:
+            np.ndarray: Links (i, j)
+                Shape: (L, 2), dtype: uint16
+        """
+        import scipy.sparse.csgraph  # type: ignore # pylint: disable=import-outside-toplevel
+
+        i, j = scipy.sparse.csgraph.min_weight_full_bipartite_matching(dist)
+
+        return np.array([i, j], np.uint16).transpose()
+
+    @staticmethod
+    def _lapmod(dist) -> np.ndarray:
+        """Sparse solving with lapmod from lap (https://github.com/gatagat/lap)
+
+        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx.
+
+        You should not call this method directly. To enforce using lapmod,
+        rather set `sparse_implementation` attribute to "lapmod" and call `sparse_solve`.
+
+        Args:
+            dist (scipy.sparse.csr_matrix): Sparse dist matrix in the CSR format
+                Shape: (N, N), dtype: float
+
+        Returns:
+            np.ndarray: Links (i, j)
+                Shape: (L, 2), dtype: uint16
+        """
+        import lap  # type: ignore # pylint: disable=import-outside-toplevel
+
+        x: np.ndarray
+
+        _, x, _ = lap.lapmod(dist.shape[0], dist.data, dist.indptr, dist.indices)
+
+        # Note that -1 are returned by lap when no link is made
+        # In our case as we handle it ourselves, no -1 should be found
+        if (x == -1).any():
+            warnings.warn("-1 found in _lap. Should not occur except if you have called yourself the function.")
+
+        i = np.arange(x.shape[0])[x != -1]
+        j = x[x != -1]
+
+        return np.array([i, j], dtype=np.uint16).transpose()

@@ -9,14 +9,13 @@ import tqdm
 import pylapy
 
 from additional_lap import lap_own_extend
-from data import generate
+from data import experimental_generate
 
 
-ADD_REF = False
-CORRECT_LINK_PROPORTION = False
+ADD_REF = True
 
 
-def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int):
+def main(rows: List[int], fa: float, md: float, smooth: bool, repeat: int):
     solvers = {solver: pylapy.LapSolver(solver).solve for solver in pylapy.LapSolver.implementations}
 
     if ADD_REF:
@@ -27,7 +26,8 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
     for row in tqdm.tqdm(rows, miniters=1):
         total_time = {solver: 0.0 for solver in solvers}
         for _ in tqdm.trange(repeat, leave=False):
-            dist = generate(row, int(row * ratio), sparsity)
+            eta = 2 * np.sqrt(0.5 / row / np.pi)
+            dist = experimental_generate(row, fa, md, space_size=1.0, hard_thresh=eta)
 
             costs = []
             for solver in solvers:
@@ -35,12 +35,10 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
                     continue
                 t = time.time()
 
-                if CORRECT_LINK_PROPORTION:
-                    # Eta is more used with small rows because statistically there are less small distances
-                    # We can correct this by dividing it by the expected non inf element on each row
-                    links = solvers[solver](dist, eta / (row * (1 - sparsity)))
-                else:
+                if smooth:
                     links = solvers[solver](dist, eta)
+                else:
+                    links = solvers[solver](dist)
 
                 total_time[solver] += time.time() - t
                 costs.append(dist[links[:, 0], links[:, 1]].sum())
@@ -54,9 +52,11 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
                 continue
             timings[solver].append(total_time[solver] / repeat)
 
-        tqdm.tqdm.write(f"Links proportion: {links.shape[0]/row}")
+        tqdm.tqdm.write(
+            f"Links proportion: {links.shape[0]/row}, Sparsity: {np.isinf(dist).sum() / dist.size}, Shape: {dist.shape}"
+        )
 
-    plt.title(f"Sparsity: {sparsity}, Eta: {eta}, ratio: {ratio}")
+    plt.title(f"Fa/Md: {fa}/{md}, {'smooth' if smooth else 'hard'} thresholding")
     for solver in solvers:
         plt.plot(rows[: len(timings[solver])], np.array(timings[solver]) * 1000, label=solver, marker="*")
 
@@ -72,13 +72,13 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Benchmarking lap")
+    # By default: non-square matrix, (let's have more detections than expected)
+    parser = argparse.ArgumentParser(description="Benchmarking lap on experimental data")
     parser.add_argument("--rows", default="5,10,20,50,100,250,500,1000,2000,5000", help="Number of rows to try")
-    parser.add_argument("--eta", default=np.inf, type=float, help="Cost limit")
-    parser.add_argument("--sparsity", default=0.0, type=float, help="Cost sparsity")
-    parser.add_argument("--ratio", default=1.0, type=float, help="Columns/rows ratio")
+    parser.add_argument("--fa", default=0.15, type=float, help="Proportion of false alarms")
+    parser.add_argument("--md", default=0.1, type=float, help="Proportion of missed detections")
+    parser.add_argument("--smooth", action="store_true", help="Use smooth thresholding rather than hard")
     parser.add_argument("--repeat", default=10, type=int, help="Repeat n times")
-
     args = parser.parse_args()
 
-    main([int(row) for row in args.rows.split(",")], args.sparsity, args.eta, args.ratio, args.repeat)
+    main([int(row) for row in args.rows.split(",")], args.fa, args.md, args.smooth, args.repeat)

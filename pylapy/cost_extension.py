@@ -95,15 +95,16 @@ def symmetric_sparse_extension(dist: np.ndarray, eta: float, inf: float = np.inf
     """Extend to a (n + m, n + m) by keeping a maximum of sparsity by symmetry
 
     dist -> |     dist     , Diag(eta / 2) |
-            | Diag(eta / 2), dist.T == inf |
+            | Diag(eta / 2), 0[dist.T == inf |
 
     Here Diag(eta) = | eta inf ... inf |
                      | inf eta ... ... |
                      | ... ... ... inf |
                      | inf ... inf eta |
 
-    Probably the only choice if you want to use lapmod.
-    It is also one of the fastest choice if your matrix is not sparse.
+    The only implementation that enable sparsity and a square matrix. (And therefore the only choice for lapmod)
+    (Note that we rather use the sparse implementation of this method)
+    It is also one of the fastest choice if your matrix is dense.
 
     Args:
         dist (np.ndarray): Distance matrix to extend
@@ -121,7 +122,7 @@ def symmetric_sparse_extension(dist: np.ndarray, eta: float, inf: float = np.inf
     extended_dist[:n, :m] = dist
     np.fill_diagonal(extended_dist[:n, m:], eta / 2)
     np.fill_diagonal(extended_dist[n:, :m], eta / 2)
-    extended_dist[n:, m:][dist.T != np.inf] = 0
+    extended_dist[n:, m:][dist.T < inf] = 0
 
     return extended_dist
 
