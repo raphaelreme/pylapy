@@ -41,12 +41,12 @@ jobs:
       - name: Install lapjv
         if: ${{ !startsWith(matrix.os, 'macos') && matrix.python-version == 3.8 }}
         run: pip install "lapjv<1.3.25"
-      - name: Install lapsolver  # Do not work on python > 3.11 (and 3.10 for windows....)
-        if: ${{ matrix.python-version != 3.11 && matrix.python-version != 3.12 && !(matrix.os == 'windows-latest' && matrix.python-version == 3.10) }}
-        run: pip install lapsolver
+      # - name: Install lapsolver  # Seems to not work on ubuntu24? neither on widnows with python >= 3.10 or python > 3.11... Let's drop this installation
+      #   if: ${{ matrix.python-version != 3.11 && matrix.python-version != 3.12 && !(matrix.os == 'windows-latest' && matrix.python-version == 3.10) }}
+      #   run: pip install lapsolver
 
   lint:  # Lint on a specific os/python version where everyone is installed
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python 3.10
