@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Set git to use LF
@@ -33,14 +33,11 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Install scipy  # Works on each os/python
         run: pip install scipy
-      - name: Install lap  # Works on each os/python (With lapx instead of lap)
-        run: pip install lapx
-      - name: Install lapjv  # Do not work on macos and have to use <1.3.25 for python < 3.9
-        if: ${{ !startsWith(matrix.os, 'macos') && matrix.python-version != 3.8 }}
+      - name: Install lap  # Works on each os/python
+        run: pip install lap
+      - name: Install lapjv  # Do not work on macos
+        if: ${{ !startsWith(matrix.os, 'macos') }}
         run: pip install lapjv
-      - name: Install lapjv
-        if: ${{ !startsWith(matrix.os, 'macos') && matrix.python-version == 3.8 }}
-        run: pip install "lapjv<1.3.25"
       # - name: Install lapsolver  # Seems to not work on ubuntu24? neither on widnows with python >= 3.10 or python > 3.11... Let's drop this installation
       #   if: ${{ matrix.python-version != 3.11 && matrix.python-version != 3.12 && !(matrix.os == 'windows-latest' && matrix.python-version == 3.10) }}
       #   run: pip install lapsolver

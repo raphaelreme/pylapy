@@ -33,9 +33,9 @@ $ pip install pylapy[sparse]  # Will install pylapy with scipy and numba
 ```
 
 As of today:
-- lapjv do not support macos. The recent versions of lapjv (>= 1.3.25) uses numpy2.0 which is only available for Python3.9.
-- lapsolver do not support python > 3.10.
-- We now use [lapx](https://github.com/rathaROG/lapx) which distributes correctly the lap package.
+- lapjv do not support macos.
+- lapsolver do not support python > 3.10. It has not been updated in a while, and will probably be removed from pylapy.
+- lap is back on track, working everywhere (thanks to [lapx](https://github.com/rathaROG/lapx)).
 
 
 ## Getting started
