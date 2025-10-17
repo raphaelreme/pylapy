@@ -334,6 +334,8 @@ class LapSolver:  # pylint: disable=too-few-public-methods
     def _lapsolver(dist: np.ndarray) -> np.ndarray:
         """Solve with lapsolver (https://github.com/cheind/py-lapsolver)
 
+        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx.
+
         You should not call this method directly. To enforce using lapsolver,
         rather set `implementation` attribute to "lapsolver" and call `solve`.
 
@@ -345,9 +347,9 @@ class LapSolver:  # pylint: disable=too-few-public-methods
             np.ndarray: Links (i, j)
                 Shape: (L, 2), dtype: uint16
         """
-        import lapsolver  # type: ignore # pylint: disable=import-outside-toplevel
+        import lap  # type: ignore # pylint: disable=import-outside-toplevel
 
-        i, j = lapsolver.solve_dense(dist)
+        i, j = lap.lapjvc(dist, return_cost=False)
 
         return np.array([i, j], np.uint16).transpose()
 
