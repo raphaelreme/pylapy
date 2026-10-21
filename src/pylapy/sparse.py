@@ -1,15 +1,12 @@
-# Hide numba dependency here
-
-from typing import List, Tuple
 import warnings
 
-import numba  # type: ignore
+import numba  # type: ignore[import-untyped]
 import numpy as np
-import scipy.sparse  # type: ignore
+import scipy.sparse
 
 
-def sparse_extension(dist, eta: float, hard: bool, method: str) -> scipy.sparse.coo_matrix:
-    """Handle sparse extension for our own implemented method"""
+def sparse_extension(dist: np.ndarray, eta: float, hard: bool, method: str) -> scipy.sparse.coo_matrix:
+    """Handle sparse extension for our own implemented method."""
     if method not in ("diag_row_cost", "diag_col_cost", "symmetric_cost"):
         raise ValueError(f"Unknown method {method}. Should be one of diag_row_cost, diag_col_cost, symmetric_cost.")
 
@@ -20,9 +17,9 @@ def sparse_extension(dist, eta: float, hard: bool, method: str) -> scipy.sparse.
         "symmetric_cost": (n + m, n + m),
     }[method]
 
-    values: List[float]
-    rows: List[int]
-    cols: List[int]
+    values: list[float]
+    rows: list[int]
+    cols: list[int]
 
     if isinstance(dist, np.ndarray):
         n, m = dist.shape
@@ -32,14 +29,14 @@ def sparse_extension(dist, eta: float, hard: bool, method: str) -> scipy.sparse.
             "symmetric_cost": sparse_symmetric_cost_dense_to_coo,
         }[method](dist, eta, hard)
 
-        return scipy.sparse.coo_matrix((np.array(values, dtype=np.float32), (rows, cols)), shape=shape)
+        return scipy.sparse.coo_matrix((np.array(values, dtype=np.float32), (rows, cols)), shape=shape)  # type: ignore[arg-type]
 
     if scipy.sparse.issparse(dist):
         n, m = dist.shape
         coo: scipy.sparse.coo_matrix = dist.tocoo()
 
         if (coo.data > eta).any():  # Up to the user to handle this
-            warnings.warn("Found some values greater than the cost limit in the sparse format")
+            warnings.warn("Found some values greater than the cost limit in the sparse format", stacklevel=2)
 
         values = coo.data.tolist()
         rows = coo.row.tolist()
@@ -49,7 +46,7 @@ def sparse_extension(dist, eta: float, hard: bool, method: str) -> scipy.sparse.
             eta = eta * len(values)
 
         if method == "symmetric_cost":
-            values.extend((0 for _ in values))
+            values.extend(0 for _ in values)
             rows.extend(n + j for j in cols)
             cols.extend(m + i for i in rows)
 
@@ -69,25 +66,25 @@ def sparse_extension(dist, eta: float, hard: bool, method: str) -> scipy.sparse.
 
 
 @numba.njit
-def dense_to_coo(dense: np.ndarray, eta: float) -> Tuple[List[float], List[int], List[int]]:
-    """Converts a dense 2d matrix to COO sparse matrix, by keeping only values smaller than eta
+def dense_to_coo(dist: np.ndarray, eta: float) -> tuple[list[float], list[int], list[int]]:
+    """Converts a dense 2d matrix to COO sparse matrix, by keeping only values smaller than eta.
 
     Args:
-        dense (np.ndarray): 2d dense matrix
+        dist (np.ndarray): 2d dense matrix
         eta (float): Max value to keep in the sparse matrix. All values above are filtered
 
     Returns:
-        Tuple[List[float], List[int], List[int]]: COO format (values, rows, cols)
+        tuple[list[float], list[int], list[int]]: COO format (values, rows, cols)
     """
-    n, m = dense.shape
+    n, m = dist.shape
     values = []
     rows = []
     cols = []
 
     for i in range(n):
         for j in range(m):
-            if dense[i, j] <= eta:
-                values.append(dense[i, j])
+            if dist[i, j] <= eta:
+                values.append(dist[i, j])
                 rows.append(i)
                 cols.append(j)
 
@@ -97,8 +94,8 @@ def dense_to_coo(dense: np.ndarray, eta: float) -> Tuple[List[float], List[int],
 @numba.njit
 def sparse_diag_row_cost_dense_to_coo(
     dist: np.ndarray, eta: float, hard=False
-) -> Tuple[List[float], List[int], List[int]]:
-    """Sparse extension into (n, n + m) by setting the cost limit on the diagonal rows
+) -> tuple[list[float], list[int], list[int]]:
+    """Sparse extension into (n, n + m) by setting the cost limit on the diagonal rows.
 
     dist -> | dist[dist <= eta], Diag(eta) |
 
@@ -124,7 +121,7 @@ def sparse_diag_row_cost_dense_to_coo(
             Default: False (will be smooth-thresholded)
 
     Returns:
-        Tuple[List[float], List[int], List[int]]: Extended dist in the COO format (values, rows, cols)
+        tuple[list[float], list[int], list[int]]: Extended dist in the COO format (values, rows, cols)
             shape: (n + m, n)
     """
     n, m = dist.shape
@@ -153,8 +150,8 @@ def sparse_diag_row_cost_dense_to_coo(
 @numba.njit
 def sparse_diag_col_cost_dense_to_coo(
     dist: np.ndarray, eta: float, hard=False
-) -> Tuple[List[float], List[int], List[int]]:
-    """Sparse extension into (n, n + m) by setting the cost limit on the diagonal columns
+) -> tuple[list[float], list[int], list[int]]:
+    """Sparse extension into (n, n + m) by setting the cost limit on the diagonal columns.
 
     dist -> | dist[dist <= eta]|
             |      Diag(eta)   |
@@ -179,7 +176,7 @@ def sparse_diag_col_cost_dense_to_coo(
             Default: False (will be smooth-thresholded)
 
     Returns:
-        Tuple[List[float], List[int], List[int]]: Extended dist in the COO format (values, rows, cols)
+        tuple[list[float], list[int], list[int]]: Extended dist in the COO format (values, rows, cols)
             Shape: (n, n + m)
     """
     n, m = dist.shape
@@ -207,9 +204,9 @@ def sparse_diag_col_cost_dense_to_coo(
 
 @numba.njit
 def sparse_symmetric_cost_dense_to_coo(
-    dense: np.ndarray, eta: float, hard=False
-) -> Tuple[List[float], List[int], List[int]]:
-    """Sparse extension into (n + m, n + m) by setting the cost limit on the diagonal columns
+    dist: np.ndarray, eta: float, hard=False
+) -> tuple[list[float], list[int], list[int]]:
+    """Sparse extension into (n + m, n + m) by setting the cost limit on the diagonal columns.
 
     dist -> | dist[dist <= eta], Diag(eta / 2) |
             |   Diag(eta / 2)  , 0[dist<=eta].T|
@@ -241,18 +238,18 @@ def sparse_symmetric_cost_dense_to_coo(
             Default: False (will be smooth-thresholded)
 
     Returns:
-        Tuple[List[float], List[int], List[int]]: Extended dist in the COO format (values, rows, cols)
+        tuple[list[float], list[int], list[int]]: Extended dist in the COO format (values, rows, cols)
             Shape: (n + m, n + m)
     """
-    n, m = dense.shape
+    n, m = dist.shape
     values = []
     rows = []
     cols = []
 
     for i in range(n):
         for j in range(m):
-            if dense[i, j] <= eta:
-                values.append(dense[i, j])
+            if dist[i, j] <= eta:
+                values.append(dist[i, j])
                 rows.append(i)
                 cols.append(j)
 

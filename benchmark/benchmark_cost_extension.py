@@ -1,19 +1,17 @@
 import argparse
 import time
-from typing import Dict, List
 
-import matplotlib.pyplot as plt  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]
 import numpy as np
 import tqdm
+from additional_lap import lap_own_extend
+from data import generate
 
 import pylapy
 from pylapy import cost_extension
 
-from additional_lap import lap_own_extend
-from data import generate
 
-
-def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int):
+def main(rows: list[int], sparsity: float, eta: float, ratio: float, repeat: int):  # noqa: C901
     solvers = {solver: pylapy.LapSolver(solver) for solver in ["lap", "lapjv", "scipy", "lapsolver"]}
     extensions = [
         # You can uncomment them to see how they perform. But they are all usually worse
@@ -39,7 +37,7 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
     print(dist.shape, (dist == np.inf).sum() / dist.size)
     costs = []
     hps = []
-    for solver in solvers:
+    for solver in solvers:  # noqa: PLC0206
         for extension in extensions:
             hps.append((solver, extension.__name__))
             solvers[solver].cost_extension = extension
@@ -50,7 +48,7 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
 
     if (np.array(costs) != costs[0]).any():  # Check that all methods have similar results
         print("Warning a method has yield a different cost:")
-        print([(*hp, cost) for hp, cost in zip(hps, costs)])
+        print([(*hp, cost) for hp, cost in zip(hps, costs, strict=True)])
 
     # Compute ref time
     ref = []
@@ -66,12 +64,12 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
         ref.append(total_time / repeat)
 
     for solver in tqdm.tqdm(solvers, desc="Solver"):
-        timings: Dict[str, List[float]] = {extension.__name__: [] for extension in extensions}
+        timings: dict[str, list[float]] = {extension.__name__: [] for extension in extensions}
         for extension in tqdm.tqdm(extensions, desc="Extension", leave=False):
             solvers[solver].cost_extension = extension
 
             for row in tqdm.tqdm(rows, desc="Rows", miniters=1, leave=False):
-                if solver == "lapsolver" and row > 2000:  # Lapsolver is too slow
+                if solver == "lapsolver" and row > 2000:  # Lapsolver is too slow  # noqa: PLR2004
                     continue
 
                 total_time = 0.0
@@ -85,7 +83,7 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
 
         plt.figure()
         plt.plot(rows, np.array(ref) * 1000, label="ref", marker="*")
-        for extension_name in timings:
+        for extension_name in timings:  # noqa: PLC0206
             plt.plot(
                 rows[: len(timings[extension_name])],
                 np.array(timings[extension_name]) * 1000,

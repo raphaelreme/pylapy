@@ -1,59 +1,54 @@
 import argparse
 import time
-from typing import Dict, List
 
-import matplotlib.pyplot as plt  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore[untyped]
 import numpy as np
 import tqdm
-
-import pylapy
-
 from additional_lap import lap_own_extend
 from data import experimental_generate
 
+import pylapy
 
 ADD_REF = True
+K_SIGMA = 3  # Threshold at 3sigma
 
 
-def main(rows: List[int], fa: float, md: float, smooth: bool, repeat: int):
+def main(rows: list[int], fa: float, md: float, smooth: bool, repeat: int):
     solvers = {solver: pylapy.LapSolver(solver).solve for solver in pylapy.LapSolver.implementations}
 
     if ADD_REF:
         solvers["ref"] = lap_own_extend
 
-    timings: Dict[str, List[float]] = {solver: [] for solver in solvers}
+    timings: dict[str, list[float]] = {solver: [] for solver in solvers}
 
     for row in tqdm.tqdm(rows, miniters=1):
-        total_time = {solver: 0.0 for solver in solvers}
+        total_time = {solver: 0.0 for solver in solvers}  # noqa: C420
         for _ in tqdm.trange(repeat, leave=False):
-            eta = 2 * np.sqrt(0.5 / row / np.pi)
+            eta = K_SIGMA * np.sqrt(0.5 / row / np.pi)
             dist = experimental_generate(row, fa, md, space_size=1.0, hard_thresh=eta)
 
             costs = []
-            for solver in solvers:
-                if solver == "lapsolver" and row > 2000:  # Lap solver is too slow
+            for solver in solvers:  # noqa: PLC0206
+                if solver == "lapsolver" and row > 2000:  # Lap solver is too slow  # noqa: PLR2004
                     continue
                 t = time.time()
 
-                if smooth:
-                    links = solvers[solver](dist, eta)
-                else:
-                    links = solvers[solver](dist)
+                links = solvers[solver](dist, eta) if smooth else solvers[solver](dist)
 
                 total_time[solver] += time.time() - t
                 costs.append(dist[links[:, 0], links[:, 1]].sum())
 
             if (np.array(costs) != costs[0]).any():  # Check that all method have similar results
                 tqdm.tqdm.write("Warning a method has yield a different cost:")
-                tqdm.tqdm.write(str(list(zip(solvers, costs))))
+                tqdm.tqdm.write(str(list(zip(solvers, costs, strict=True))))
 
         for solver in solvers:
-            if solver == "lapsolver" and row > 2000:
+            if solver == "lapsolver" and row > 2000:  # noqa: PLR2004
                 continue
             timings[solver].append(total_time[solver] / repeat)
 
         tqdm.tqdm.write(
-            f"Links proportion: {links.shape[0]/row}, Sparsity: {np.isinf(dist).sum() / dist.size}, Shape: {dist.shape}"
+            f"Links prop: {links.shape[0] / row}, Sparsity: {np.isinf(dist).sum() / dist.size}, Shape: {dist.shape}"
         )
 
     plt.title(f"Fa/Md: {fa}/{md}, {'smooth' if smooth else 'hard'} thresholding")

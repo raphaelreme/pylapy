@@ -1,14 +1,12 @@
-from typing import Tuple
-
-import numba  # type: ignore
+import numba  # type: ignore[import-untyped]
 import numpy as np
 
 from pylapy.cost_extension import symmetric_sparse_extension
 
 
 @numba.jit
-def to_csr(array: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Convert array to csr format (fast)
+def to_csr(array: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Convert array to csr format (fast).
 
     Similar scipy.sparse.csr_array but handle inf value as the sparse value. (And faster)
 
@@ -39,7 +37,7 @@ def to_csr(array: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def lap_sparse_solve(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
-    """Wraps lap.lapmod for sparse matrix
+    """Wraps lap.lapmod for sparse matrix.
 
     Note: It is not stable, lapmod do not support matrices where some rows
     cannot be linked to any columns.
@@ -48,7 +46,7 @@ def lap_sparse_solve(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
 
     # XXX: This is now way better implemented in sparse_solve. Should not be used any longer
     """
-    import lap  # type: ignore # pylint: disable=import-outside-toplevel
+    import lap  # noqa: PLC0415
 
     n, m = dist.shape
     links: np.ndarray
@@ -81,13 +79,13 @@ def lap_sparse_solve(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
 
 
 def lap_own_extend(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
-    """Wraps lap.lapjv but using their own implementation for matrix extension
+    """Wraps lap.lapjv but using their own implementation for matrix extension.
 
     Faster without extension (same as ours but without the wrapper) in low dimensions
     Slower in high dimension (n > 1000) with eta extension
     Much slower if n != m (They extend much more than required)
     """
-    import lap  # type: ignore # pylint: disable=import-outside-toplevel
+    import lap  # noqa: PLC0415
 
     n, m = dist.shape
 
@@ -112,6 +110,4 @@ def lap_own_extend(dist: np.ndarray, eta: float = np.inf) -> np.ndarray:
     valid_links = dist[i, j] < inf
     i, j = i[valid_links], j[valid_links]
 
-    links = np.array([i, j], dtype=np.uint16).transpose()
-
-    return links
+    return np.array([i, j], dtype=np.uint16).transpose()

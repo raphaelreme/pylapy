@@ -1,37 +1,34 @@
 import argparse
 import time
-from typing import Dict, List
 
-import matplotlib.pyplot as plt  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]
 import numpy as np
 import tqdm
-
-import pylapy
-
 from additional_lap import lap_own_extend
 from data import generate
 
+import pylapy
 
-ADD_REF = False
+ADD_REF = True
 CORRECT_LINK_PROPORTION = False
 
 
-def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int):
+def main(rows: list[int], sparsity: float, eta: float, ratio: float, repeat: int):  # noqa: C901
     solvers = {solver: pylapy.LapSolver(solver).solve for solver in pylapy.LapSolver.implementations}
 
     if ADD_REF:
         solvers["ref"] = lap_own_extend
 
-    timings: Dict[str, List[float]] = {solver: [] for solver in solvers}
+    timings: dict[str, list[float]] = {solver: [] for solver in solvers}
 
     for row in tqdm.tqdm(rows, miniters=1):
-        total_time = {solver: 0.0 for solver in solvers}
+        total_time = {solver: 0.0 for solver in solvers}  # noqa: C420
         for _ in tqdm.trange(repeat, leave=False):
             dist = generate(row, int(row * ratio), sparsity)
 
             costs = []
-            for solver in solvers:
-                if solver == "lapsolver" and row > 2000:  # Lap solver is too slow
+            for solver in solvers:  # noqa: PLC0206
+                if solver == "lapsolver" and row > 2000:  # Lap solver is too slow  # noqa: PLR2004
                     continue
                 t = time.time()
 
@@ -47,14 +44,14 @@ def main(rows: List[int], sparsity: float, eta: float, ratio: float, repeat: int
 
             if (np.array(costs) != costs[0]).any():  # Check that all method have similar results
                 tqdm.tqdm.write("Warning a method has yield a different cost:")
-                tqdm.tqdm.write(str(list(zip(solvers, costs))))
+                tqdm.tqdm.write(str(list(zip(solvers, costs, strict=True))))
 
         for solver in solvers:
-            if solver == "lapsolver" and row > 2000:
+            if solver == "lapsolver" and row > 2000:  # noqa: PLR2004
                 continue
             timings[solver].append(total_time[solver] / repeat)
 
-        tqdm.tqdm.write(f"Links proportion: {links.shape[0]/row}")
+        tqdm.tqdm.write(f"Links proportion: {links.shape[0] / row}")
 
     plt.title(f"Sparsity: {sparsity}, Eta: {eta}, ratio: {ratio}")
     for solver in solvers:

@@ -1,10 +1,10 @@
-import numpy as np
 import cv2
-import matplotlib.pyplot as plt  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]
+import numpy as np
 
 
 def generate(n: int, m: int, sparsity=0.0) -> np.ndarray:
-    """Generate a (n, m) dist matrix with optional sparsity
+    """Generate a (n, m) dist matrix with optional sparsity.
 
     Args:
         n (int): Rows
@@ -22,7 +22,7 @@ def generate(n: int, m: int, sparsity=0.0) -> np.ndarray:
 
 # Could use a more faithful generate
 def experimental_generate(n: int, fa=0.0, md=0.0, space_size=1, area_ratio=0.5, hard_thresh=float("inf")) -> np.ndarray:
-    """Generate a realistic (n, n - md + fa) dist matrix with some sparsity
+    """Generate a realistic (n, n - md + fa) dist matrix with some sparsity.
 
     Generated from 2D points in a confined space that moves under Brownian assumption (Gaussian noise)
     Some points are lost, some are wrongly detected (False alarms / missed detections)
@@ -72,7 +72,7 @@ def experimental_generate(n: int, fa=0.0, md=0.0, space_size=1, area_ratio=0.5, 
 
 
 def plot_experimental_generate(n: int, space_size=1, area_ratio=0.5):
-    """Plot the generated 2D space by `experimental_generate`"""
+    """Plot the generated 2D space by `experimental_generate`."""
     points = np.random.uniform(0, space_size, (n, 2))  # random points on the 2d space
 
     # Let's move them by a random deplacement

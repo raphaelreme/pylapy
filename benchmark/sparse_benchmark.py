@@ -1,20 +1,17 @@
 import argparse
 import time
-from typing import Dict, List
 
-import matplotlib.pyplot as plt  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]
 import numpy as np
 import tqdm
-
-import pylapy
-
 from data import experimental_generate
 
+import pylapy
 
 K_SIGMA = 3  # Threshold at 3sigma
 
 
-def main(rows: List[int], fa: float, md: float, smooth: bool, repeat: int):
+def main(rows: list[int], fa: float, md: float, smooth: bool, repeat: int):
     solvers = {"lapmod_symmetric": pylapy.LapSolver(sparse_implementation="lapmod").sparse_solve}
     solver_ = pylapy.LapSolver(sparse_implementation="csgraph")
     solver_.sparse_extension = "diag_row_cost"  # diag_col_cost is equivalent
@@ -24,25 +21,25 @@ def main(rows: List[int], fa: float, md: float, smooth: bool, repeat: int):
     solvers["csgraph_symmetric"] = solver_.sparse_solve
 
     # Warm up (compile numba)
-    for solver in solvers:  # pylint: disable=consider-using-dict-items
+    for solver in solvers:  # noqa: PLC0206
         solvers[solver](np.random.rand(5, 5), 0.1, hard=not smooth)
 
     # Let's compare with scipy ?
     dense_implementation = "scipy"
     dense_solver = pylapy.LapSolver(implementation=dense_implementation)
 
-    timings: Dict[str, List[float]] = {solver: [] for solver in solvers}
+    timings: dict[str, list[float]] = {solver: [] for solver in solvers}
     timings[dense_implementation] = []
 
     for row in tqdm.tqdm(rows, miniters=1):
-        total_time = {solver: 0.0 for solver in solvers}
+        total_time = {solver: 0.0 for solver in solvers}  # noqa: C420
         total_time[dense_implementation] = 0.0
         for _ in tqdm.trange(repeat, leave=False):
             eta = K_SIGMA * np.sqrt(0.5 / row / np.pi)
             dist = experimental_generate(row, fa, md, space_size=1.0, hard_thresh=eta)
 
             costs = []
-            for solver in solvers:  # pylint: disable=consider-using-dict-items
+            for solver in solvers:  # noqa: PLC0206
                 t = time.time()
 
                 links = solvers[solver](dist, eta, hard=not smooth)
@@ -52,17 +49,14 @@ def main(rows: List[int], fa: float, md: float, smooth: bool, repeat: int):
 
             t = time.time()
 
-            if smooth:
-                links = dense_solver.solve(dist, eta)
-            else:
-                links = dense_solver.solve(dist)
+            links = dense_solver.solve(dist, eta) if smooth else dense_solver.solve(dist)
 
             total_time[dense_implementation] += time.time() - t
             costs.append(dist[links[:, 0], links[:, 1]].sum())
 
             if (np.array(costs) != costs[0]).any():  # Check that all method have similar results
                 tqdm.tqdm.write("Warning a method has yield a different cost:")
-                tqdm.tqdm.write(str(list(zip(list(solvers) + [dense_solver], costs))))
+                tqdm.tqdm.write(str(list(zip([*list(solvers), dense_solver], costs, strict=True))))
 
         for solver in solvers:
             timings[solver].append(total_time[solver] / repeat)
@@ -70,7 +64,7 @@ def main(rows: List[int], fa: float, md: float, smooth: bool, repeat: int):
         timings[dense_implementation].append(total_time[dense_implementation] / repeat)
 
         tqdm.tqdm.write(
-            f"Links proportion: {links.shape[0]/row}, Sparsity: {np.isinf(dist).sum() / dist.size}, Shape: {dist.shape}"
+            f"Links prop: {links.shape[0] / row}, Sparsity: {np.isinf(dist).sum() / dist.size}, Shape: {dist.shape}"
         )
 
     plt.title(f"Fa/Md: {fa}/{md}, {'smooth' if smooth else 'hard'} thresholding")

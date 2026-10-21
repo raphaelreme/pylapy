@@ -1,3 +1,5 @@
+# OUTDATED
+
 name: Lint and Test
 
 # Triggered by other workflows or on any push on branches

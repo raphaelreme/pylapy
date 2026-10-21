@@ -1,4 +1,4 @@
-"""Implements several cost extension functions
+"""Cost extension functions to add an alternive non-linking cost.
 
 Adds "sink" columns and rows to the cost matrix (also making it square if it is not the case).
 When a true row/column is linked to a "sink" column/row, it is considered non linked.
@@ -26,8 +26,8 @@ In some cases, other methods seems to be a good choice:
 import numpy as np
 
 
-def split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # pylint: disable=unused-argument
-    """Extend to a (n + m, n + m) by splitting the cost limit on rows and columns
+def split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
+    """Extend to a (n + m, n + m) by splitting the cost limit on rows and columns.
 
     dist -> |  dist  , eta / 2 |
             | eta / 2,    0    |
@@ -57,7 +57,7 @@ def split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
 
 
 def diag_split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by splitting the cost limit in diagonal block
+    """Extend to a (n + m, n + m) by splitting the cost limit in diagonal block.
 
     dist -> |     dist     , Diag(eta / 2) |
             | Diag(eta / 2),       0       |
@@ -92,7 +92,7 @@ def diag_split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.nda
 
 
 def symmetric_sparse_extension(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by keeping a maximum of sparsity by symmetry
+    """Extend to a (n + m, n + m) by keeping a maximum of sparsity by symmetry.
 
     dist -> |     dist     , Diag(eta / 2) |
             | Diag(eta / 2), 0[dist.T == inf |
@@ -122,13 +122,13 @@ def symmetric_sparse_extension(dist: np.ndarray, eta: float, inf: float = np.inf
     extended_dist[:n, :m] = dist
     np.fill_diagonal(extended_dist[:n, m:], eta / 2)
     np.fill_diagonal(extended_dist[n:, :m], eta / 2)
-    extended_dist[n:, m:][dist.T < inf] = 0
+    extended_dist[n:, m:][dist.T < inf] = 0  # noqa: SIM300
 
     return extended_dist
 
 
-def row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # pylint: disable=unused-argument
-    """Extend to a (n + m, n + m) by setting the cost limit on the rows
+def row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
+    """Extend to a (n + m, n + m) by setting the cost limit on the rows.
 
     dist -> | dist, eta |
             |  0  ,  0  |
@@ -156,7 +156,7 @@ def row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  
 
 
 def row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the rows and inf eveywhere else
+    """Extend to a (n + m, n + m) by setting the cost limit on the rows and inf eveywhere else.
 
     dist -> | dist, eta |
             | inf , inf |
@@ -183,8 +183,8 @@ def row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarra
     return extended_dist
 
 
-def col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # pylint: disable=unused-argument
-    """Extend to a (n + m, n + m) by setting the cost limit on the columns
+def col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
+    """Extend to a (n + m, n + m) by setting the cost limit on the columns.
 
     dist -> | dist, 0 |
             | eta , 0 |
@@ -211,7 +211,7 @@ def col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  
 
 
 def col_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the columns and inf eveywhere else
+    """Extend to a (n + m, n + m) by setting the cost limit on the columns and inf eveywhere else.
 
     dist -> | dist, inf |
             | eta , inf |
@@ -238,7 +238,7 @@ def col_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarra
 
 
 def diag_row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows
+    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows.
 
     dist -> | dist, Diag(eta) |
             |  0  ,     0     |
@@ -271,7 +271,7 @@ def diag_row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarr
 
 
 def diag_row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows and inf eveywhere else
+    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows and inf eveywhere else.
 
     dist -> | dist, Diag(eta) |
             | inf ,    inf    |
@@ -303,7 +303,7 @@ def diag_row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.n
 
 
 def diag_col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns
+    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns.
 
     dist -> |   dist   , 0 |
             | Diag(eta), 0 |
@@ -331,7 +331,7 @@ def diag_col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarr
 
 
 def diag_col_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns and inf eveywhere else
+    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns and inf eveywhere else.
 
     dist -> |   dist   , inf |
             | Diag(eta), inf |
