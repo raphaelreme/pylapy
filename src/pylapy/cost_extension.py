@@ -178,7 +178,7 @@ def fill_row_pad_zero(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.n
 
 
 def fill_row_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the rows and inf eveywhere else.
+    """Extend to a (n + m, n + m) by setting the cost limit on the rows and inf everywhere else.
 
     dist -> | dist, eta |
             | inf , inf |
@@ -230,7 +230,7 @@ def fill_col_pad_zero(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.n
 
 
 def fill_col_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the columns and inf eveywhere else.
+    """Extend to a (n + m, n + m) by setting the cost limit on the columns and inf everywhere else.
 
     dist -> | dist, inf |
             | eta , inf |
@@ -288,7 +288,7 @@ def diag_row_pad_zero(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.n
 
 
 def diag_row_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows and inf eveywhere else.
+    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows and inf everywhere else.
 
     dist -> | dist, Diag(eta) |
             | inf ,    inf    |
@@ -346,7 +346,7 @@ def diag_col_pad_0(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndar
 
 
 def diag_col_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
-    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns and inf eveywhere else.
+    """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns and inf everywhere else.
 
     dist -> |   dist   , inf |
             | Diag(eta), inf |

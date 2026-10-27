@@ -193,7 +193,7 @@ class LapSolver:
           unmatched.
         - `alternative_cost`: the cost of leaving a node unmatched. A node is matched only when its best
           admissible link is cheaper than this. Nodes with admissible links lower than this alternative cost
-          can also be skipped if they induce larger cost in the global assignement.
+          can also be skipped if they induce larger cost in the global assignment.
 
         By definition, `alternative_cost` superseds `cost_limit` as it prevents any link with higher cost.
 

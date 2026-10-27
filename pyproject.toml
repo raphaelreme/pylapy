@@ -148,3 +148,6 @@ strict = true
 
 [tool.coverage.run]
 source = ["pylapy"]
+
+[tool.typos.default.extend-identifiers]
+PNGs = "PNGs"

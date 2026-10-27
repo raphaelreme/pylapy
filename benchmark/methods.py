@@ -140,7 +140,6 @@ def solve_csgraph(dist: sparray) -> np.ndarray:
     # Remove 0 value: scipy does not support it.
     mini = csr.data.min()
     if mini <= 0.0:
-        # print(f"WARNING: Found non-positive values ({mini}). The inputed CSR will be modified in place to remove it.")
         csr.data += 0.1 - mini
 
     return np.stack(scipy.sparse.csgraph.min_weight_full_bipartite_matching(csr)).T.astype(np.uint16)

@@ -1,3 +1,6 @@
+# Generated benchmark SVGs are not source; keep all hooks away from them.
+exclude: '\.svg$'
+
 repos:
   - repo: builtin
     hooks:
