@@ -1,5 +1,10 @@
 # Pylapy
 
+[![License](https://img.shields.io/github/license/raphaelreme/pylapy)](https://github.com/raphaelreme/pylapy/raw/main/LICENSE)
+[![PyPi](https://img.shields.io/pypi/v/pylapy)](https://pypi.org/project/pylapy/)
+[![Python](https://img.shields.io/pypi/pyversions/pylapy)](https://pypi.org/project/pylapy/)
+[![Downloads](https://img.shields.io/pypi/dm/pylapy)](https://pypi.org/project/pylapy/)
+[![Codecov](https://codecov.io/github/raphaelreme/pylapy/graph/badge.svg?token=9124FUY5R5)](https://codecov.io/github/raphaelreme/pylapy)
 [![Lint and Test](https://github.com/raphaelreme/pylapy/actions/workflows/tests.yml/badge.svg)](https://github.com/raphaelreme/pylapy/actions/workflows/tests.yml)
 
 **pylapy** is a thin, unifying wrapper around the fast Linear Assignment Problem (LAP) solvers available in
