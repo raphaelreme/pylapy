@@ -180,7 +180,9 @@ def diag_split_sparse(
     values, rows, cols = _to_coo_format(dist, cost_limit)
 
     n, m = dist.shape
-    alternative_cost = values.sum() + 1 if np.isinf(alternative_cost) else alternative_cost
+
+    # abs sum for inf as in `solve.solve`
+    alternative_cost = np.abs(values).sum() + 1 if np.isinf(alternative_cost) else alternative_cost
 
     # Mirror each real link (i, j) -> (n + j, m + i) at cost 0, so the extended problem stays
     # feasible without collapsing onto the all-sink solution.
@@ -233,7 +235,9 @@ def diag_row_no_pad(
     values, rows, cols = _to_coo_format(dist, cost_limit)
 
     n, m = dist.shape
-    alternative_cost = values.sum() + 1 if np.isinf(alternative_cost) else alternative_cost
+
+    # abs sum for inf as in `solve.solve`
+    alternative_cost = np.abs(values).sum() + 1 if np.isinf(alternative_cost) else alternative_cost
 
     # Alternative row cost on the diagonal (i, m + i)
     values = np.concatenate((values, np.full(n, alternative_cost, dtype=values.dtype)))
@@ -271,7 +275,9 @@ def diag_col_no_pad(
     values, rows, cols = _to_coo_format(dist, cost_limit)
 
     n, m = dist.shape
-    alternative_cost = values.sum() + 1 if np.isinf(alternative_cost) else alternative_cost
+
+    # abs sum for inf as in `solve.solve`
+    alternative_cost = np.abs(values).sum() + 1 if np.isinf(alternative_cost) else alternative_cost
 
     # Alternative column cost on the diagonal (n + j, j)
     values = np.concatenate((values, np.full(m, alternative_cost, dtype=values.dtype)))

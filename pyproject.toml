@@ -135,7 +135,7 @@ lint.pydocstyle.convention = "google"
 lint.pylint.max-args = 8
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*.py" = ["INP001", "D103", "S101", "ANN201", "SLF001", "T201", "PLR2004"]
+"tests/*.py" = ["INP001", "D103", "S101", "ANN201", "SLF001", "T201", "PLR2004", "FBT"]
 "benchmark*/*.py" = ["INP001", "D103", "S101", "ANN201", "SLF001", "T201", "NPY002", "ERA001"]
 
 

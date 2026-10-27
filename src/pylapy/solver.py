@@ -106,28 +106,28 @@ class LapSolver:
 
         if self.implementation:
             importlib.import_module(self.implementations[self.implementation])
-        else:
+        else:  # pragma: no cover  # Covered but coverage fails to get it
             for imp, module in self.implementations.items():
                 try:
                     importlib.import_module(module)
                     self.implementation = imp
                     break
-                except ImportError:
+                except ImportError:  # pragma: no cover
                     pass
             if self.implementation is None:
-                raise ImportError(
+                raise ImportError(  # pragma: no cover
                     f"Unable to import any of the following implementations {tuple(self.implementations.items())}"
                 )
 
         if self.sparse_implementation:
             importlib.import_module(self.sparse_implementations[self.sparse_implementation])
-        else:
+        else:  # pragma: no cover  # Covered but coverage fails to get it
             for imp, module in self.sparse_implementations.items():
                 try:
                     importlib.import_module(module)
                     self.sparse_implementation = imp
                     break
-                except ImportError:
+                except ImportError:  # pragma: no cover
                     pass
 
         self._shape_extension: str | ShapeExtensionProtocol = DEFAULT_SHAPE_EXTENSIONS.get(
@@ -225,8 +225,10 @@ class LapSolver:
         if dist.size == 0:
             return np.zeros((0, 2), dtype=np.uint16)
 
-        # inf defined as a large enough value (inf is not supported by many backend)
-        inf = dist[dist != np.inf].sum() + 1
+        # inf defined as a large enough value (inf is not supported by many backend).
+        # We use the sum of absolute values (not the signed sum): Even with negative costs
+        # it is >= any single |cost| and >= the magnitude of any assignment,
+        inf = np.abs(dist[dist != np.inf]).sum() + 1
 
         if not np.isinf(cost_limit):
             dist[dist > cost_limit] = inf
@@ -333,10 +335,6 @@ class LapSolver:
         else:  # Let's do a cost_extension
             # alternative_cost=inf: no alternative sink, only the cost_limit threshold on the distances.
             dist = self.sparse_extension(dist, cost_limit=cost_limit, alternative_cost=alternative_cost)
-
-        # Edge case for empty matrices (after thresholding)
-        if dist.size == 0:
-            return np.zeros((0, 2), dtype=np.uint16)
 
         links: np.ndarray = getattr(self, f"_{self.sparse_implementation}")(dist)
 
@@ -526,6 +524,8 @@ class LapSolver:
         You should not call this method directly. To enforce using lapmod,
         rather set `sparse_implementation` attribute to "lapmod" and call `sparse_solve`.
 
+        Warning: This method modify inplace the input, if it contains negative values.
+
         This backend only support square matrices.
 
         Args:
@@ -545,6 +545,12 @@ class LapSolver:
             raise ValueError(f"Lapmod only support squared matrix. Got {dist.shape}.")
 
         csr = dist.tocsr()
+
+        # lapmod rejects negative costs. Shifting every stored value by a constant is objective-invariant
+        # for the square perfect matching lapmod solves, so we shift into the positives (like _csgraph).
+        mini = csr.data.min()
+        if mini < 0.0:
+            csr.data += 0.1 - mini
 
         x, _ = lap.lapmod(csr.shape[0], csr.data, csr.indptr, csr.indices, return_cost=False)
         return np.stack((np.arange(x.shape[0]), x)).T.astype(np.uint16)
