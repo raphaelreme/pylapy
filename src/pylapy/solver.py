@@ -320,7 +320,7 @@ class LapSolver:
 
         import pylapy.sparse  # noqa: PLC0415
 
-        n, m = dist.shape
+        n, m = dist.shape  # type: ignore[misc]
         transposed = False
 
         if n > m and self.enforce_less_row_than_col:  # Transpose to solve with fewer rows
@@ -538,7 +538,7 @@ class LapSolver:
         """
         import lap  # noqa: PLC0415
 
-        if dist.shape[0] != dist.shape[1]:
+        if dist.shape[0] != dist.shape[1]:  # type: ignore[misc]
             # It only supports square matrices:
             # 1. Only diag_split_sparse cost extension
             # 2. Feasible rectangular matrices are not supported (no sparse shape extension)

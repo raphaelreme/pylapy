@@ -109,7 +109,7 @@ def measure_combo(
             means.append(mean)
             stds.append(std)
             n_links = len(result)
-            cost = core.achieved_cost(sparse_ext.sparse_to_dense(dist) if scipy.sparse.issparse(dist) else dist, result)
+            cost = core.achieved_cost(sparse_ext.sparse_to_dense(dist) if scipy.sparse.issparse(dist) else dist, result)  # type: ignore[arg-type]
             severity = abs(cost - ref_cost) if n_links == ref_n else float("inf")
             if worst is None or severity > worst[0]:
                 worst = (severity, cost, ref_cost)
@@ -147,7 +147,7 @@ def sweep_cell(records: list[dict], stopped: set[tuple], cell: Cell, repeats: in
     Skips combos already in ``stopped`` and, after each run, warns on a cost mismatch and adds the
     combo's key to ``stopped`` once its mean time exceeds ``max_time`` (per-combo early-stop).
     """
-    rows, cols = cell.instances[0][0].shape
+    rows, cols = cell.instances[0][0].shape  # type: ignore[misc]
     ref_cost = float(np.mean([cost for _, cost in cell.references]))
     for method_name, solver in SPARSE_METHODS.items():
         for ext_name, extension in SPARSE_EXTENSIONS.items():

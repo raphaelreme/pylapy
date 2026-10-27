@@ -104,7 +104,7 @@ def dense_to_coo(dist: np.ndarray, cost_limit: float) -> scipy.sparse.coo_array:
     """
     values, rows, cols = _dense_to_coo(dist, cost_limit)
 
-    return scipy.sparse.coo_array((values, (rows, cols)), shape=dist.shape, dtype=dist.dtype)
+    return scipy.sparse.coo_array((values, (rows, cols)), shape=dist.shape, dtype=dist.dtype)  # type: ignore[arg-type]
 
 
 @numba.njit
@@ -139,12 +139,12 @@ def _to_coo_format(dist: np.ndarray | sparray, cost_limit: float) -> tuple[np.nd
         # Ensure there is no values above cost_limit (or inf values)
         valid = (values != np.inf) if np.isinf(cost_limit) else (values <= cost_limit)
         if not valid.all():
-            values = values[valid]
-            rows = rows[valid]
-            cols = cols[valid]
+            values = values[valid]  # type: ignore[assignment]  # Because old scipy-stubs in 3.10
+            rows = rows[valid]  # type: ignore[assignment]
+            cols = cols[valid]  # type: ignore[assignment]
     else:
-        values_, rows_, cols_ = _dense_to_coo(dist, cost_limit)
-        values, rows, cols = np.array(values_), np.array(rows_), np.array(cols_)
+        values_, rows_, cols_ = _dense_to_coo(dist, cost_limit)  # type: ignore[arg-type]
+        values, rows, cols = np.array(values_), np.array(rows_), np.array(cols_)  # type: ignore[assignment]
 
     return values, rows, cols
 
@@ -179,7 +179,7 @@ def diag_split_sparse(
     # Convert to coo
     values, rows, cols = _to_coo_format(dist, cost_limit)
 
-    n, m = dist.shape
+    n, m = dist.shape  # type: ignore[misc]
 
     # abs sum for inf as in `solve.solve`
     alternative_cost = np.abs(values).sum() + 1 if np.isinf(alternative_cost) else alternative_cost
@@ -234,7 +234,7 @@ def diag_row_no_pad(
     # Convert to coo
     values, rows, cols = _to_coo_format(dist, cost_limit)
 
-    n, m = dist.shape
+    n, m = dist.shape  # type: ignore[misc]
 
     # abs sum for inf as in `solve.solve`
     alternative_cost = np.abs(values).sum() + 1 if np.isinf(alternative_cost) else alternative_cost
@@ -274,7 +274,7 @@ def diag_col_no_pad(
     # Convert to coo
     values, rows, cols = _to_coo_format(dist, cost_limit)
 
-    n, m = dist.shape
+    n, m = dist.shape  # type: ignore[misc]
 
     # abs sum for inf as in `solve.solve`
     alternative_cost = np.abs(values).sum() + 1 if np.isinf(alternative_cost) else alternative_cost

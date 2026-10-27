@@ -106,7 +106,7 @@ def run_sparse(
     enforce_small_row: bool = False,
 ) -> np.ndarray:
     # Old nomenclature: hard means inf alternative cost
-    n, m = dist.shape
+    n, m = dist.shape  # type: ignore[misc]
     transposed = False
 
     if n > m and enforce_small_row:  # Transpose to solve with fewer rows
@@ -116,7 +116,7 @@ def run_sparse(
 
     if hard and feasible:  # No cost extension, let's trust the user
         # XXX: Filter values higher than eta in sparse ?
-        dist = dist if scipy.sparse.issparse(dist) else dense_to_coo(dist, eta)
+        dist = dist if scipy.sparse.issparse(dist) else dense_to_coo(dist, eta)  # type: ignore[arg-type]
     elif hard:
         dist = sparse_extension(dist, cost_limit=eta)
     else:
@@ -147,7 +147,7 @@ def solve_csgraph(dist: sparray) -> np.ndarray:
 
 
 def solve_lapmod(dist: sparray) -> np.ndarray:
-    if dist.shape[0] != dist.shape[1]:
+    if dist.shape[0] != dist.shape[1]:  # type: ignore[misc]
         # Do not support feasible rectangular matrices:
         # Shape extension are not sparse (Should be extended hard)
         #
