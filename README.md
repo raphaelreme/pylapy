@@ -13,7 +13,7 @@ cost** — the core of problems like object tracking, bipartite graph matching a
 resource allocation.
 
 A single class, `pylapy.LapSolver`, exposes one interface (`solve` / `sparse_solve`) over several backends
-(all shipped by [lapx](https://github.com/rathaROG/lapx), plus [scipy](https://scipy.org/)) and adds what
+(all shipped by [lapx](https://github.com/rathaROG/lapx) and [scipy](https://scipy.org/)) and adds what
 real problems need on top of the raw solvers:
 
 - **rectangular** matrices ($N \neq M$),
@@ -29,6 +29,9 @@ The core only depends on `numpy`; every backend is an optional dependency.
 - **One API, any backend.** Switch solver (or let pylapy auto-pick the fastest installed one) without
   touching your code. On the same problem one backend can be **10×+ faster** than another — pylapy lets you
   find and use the best.
+- **Dense and sparse, one interface.** Both dense and sparse LAP solving live behind the same unified API
+  (`solve` / `sparse_solve`): keep the full cost matrix with `solve`, or drop forbidden links and solve on
+  the sparse structure with `sparse_solve` — same inputs, same `(L, 2)` link output.
 - **Handles the messy cases for you.** Rectangular shapes, infeasible links, thresholds and "leave it
   unmatched" costs are all handled by rewriting the cost matrix under the hood (see *How it works*).
 - **Real runtime wins.** Picking the right dense backend (`laprust`) already helps; and when your matrix is
@@ -71,6 +74,34 @@ links = solver.sparse_solve(dist, cost_limit=0.1)  # same, solved sparsely (need
 cost = dist[links[:, 0], links[:, 1]].sum()
 ```
 
+## The output: links
+
+Both `solve` and `sparse_solve` return the matching as an `(L, 2)` array of unsigned integers
+(`np.uint16`). Each row is a chosen link `(i, j)`: row `i` of `dist` is matched to column `j`, and
+`dist[i, j]` is that link's cost. Index back into `dist` to recover the per-link (or total) cost:
+
+```python
+links = solver.solve(dist)  # (L, 2) uint16 array of (row, col) pairs
+costs = dist[links[:, 0], links[:, 1]]  # cost of each chosen link
+total = costs.sum()
+```
+
+A matching is one-to-one, so every row index and every column index appears **at most once** — one
+link per row and one link per column.
+
+**How many links `L`?** For a plain assignment (no threshold, no `inf`) every row or column that can be
+matched is, so `L = min(N, M)`, the maximum number of links. Thresholding lowers `L`: some rows/columns
+are then left **unlinked** and simply do not appear in the output. A node is left unlinked when
+
+- all of its available links are *infeasible* — a cost of `inf`, or above `cost_limit`; a node with no
+  available (after competition with other nodes) feasible link stays unmatched, or
+- an `alternative_cost` makes leaving it unmatched cheaper than any of its links.
+
+Internally pylapy makes these cases solvable by rewriting the cost matrix (see *How it works*): `inf` /
+above-limit costs are replaced by a large finite sentinel, and an `alternative_cost` adds "sink"
+rows/columns priced at that cost. Any link the backend returns onto a sentinel value or a sink node is
+discarded before returning — which is exactly why those rows/columns come back unlinked.
+
 ## How it works
 
 `solve` and `sparse_solve` take two optional, independent parameters (both default to `inf`):
@@ -98,6 +129,29 @@ solver.shape_extension = my_callable  # or your own
 
 See the `pylapy.shape_extension`, `pylapy.cost_extension` and `pylapy.sparse` modules (and the `LapSolver`
 docstring) for the full list and the rationale.
+
+## Migrating from v1 to the future v2
+
+v1-style calls are **still currently supported**: they emit a
+`DeprecationWarning` and are mapped onto the new API (see the table). They will be removed in v2.0.0, so migrate when convenient, the breaking v2 will probably be deployed in the end of the year.
+
+The v1 single `eta` threshold is replaced by two independent parameters, `cost_limit` and
+`alternative_cost` (see *How it works* above). The mapping is:
+
+| v1 call | v2 equivalent |
+| --- | --- |
+| `solve(dist, eta)` | `solve(dist, alternative_cost=eta)` |
+| `sparse_solve(dist, eta)` | `sparse_solve(dist, alternative_cost=eta)` |
+| `sparse_solve(dist, eta, hard=True)` | `sparse_solve(dist, cost_limit=eta)` |
+| `sparse_solve(dist, eta, hard=True, feasible=True)` | `sparse_solve(dist, cost_limit=eta, assume_feasible=True)` |
+
+In general, `sparse_solve(dist, eta, hard, feasible)` maps to
+`sparse_solve(dist, cost_limit=eta, alternative_cost=(inf if hard else eta), assume_feasible=feasible)`.
+
+**Extras.** The `pylapy[sparse]` extra is deprecated; it is kept as an alias for `pylapy[csgraph]`
+(`scipy` + `numba`). Depend on `pylapy[csgraph]` (or `pylapy[lapmod]`, which also adds `lapx` for the
+`lapmod` backend) instead.
+
 
 ## Background: the assignment problem & Jonker–Volgenant
 
@@ -131,7 +185,7 @@ In short, on synthetic point-matching data:
 - When you **threshold** (a cost limit or an alternative cost), the **sparse** backends
   (`csgraph`, `lapmod`) are usually more efficient than a dense solve — often one order of magnitude.
 
-| plain assignment | `cost_limit` only | `alternative_cost` |
+| plain assignment | `cost_limit` only | `alternative cost` |
 | --- | --- | --- |
 | ![full](benchmark/images/method_comparison/experimental/full_sq1.0.svg) | ![gated](benchmark/images/method_comparison/experimental/gated_sq1.0.svg) | ![alternative](benchmark/images/method_comparison/experimental/gated_alternative_sq1.0.svg) |
 

@@ -31,8 +31,8 @@ The backends are wrapped directly in `methods.py` (`solve_scipy`, `solve_lap`, `
   unit square, displaced by Gaussian motion ($\sigma \propto 1/\sqrt{n}$), ~10% are dropped ("missed") and
   ~10% extra points are added ("false alarms"); the cost is the Euclidean distance between the two point sets.
   The natural threshold is $\eta = 3\sigma$. `squareness` $s$ sets the shape:
-  $\text{rows} = \operatorname{round}(n\times s)$, $\text{cols} = \operatorname{round}(n/s)$ ($s = 1$ square,
-  $s = 0.9$ / $1.1$ rectangular).
+  $\text{rows} = \text{round}(n\times s)$, $\text{cols} = \text{round}(n/s)$. In other terms, $s = 1.0$ means square,
+  $s = 0.9$ / $1.1$ means rectangular.
 - **Sizes** $n$ from 5 to 5000 (log-spaced), several random matrices per size, each combo timed $k$ times
   and averaged.
 - **Correctness** — every combo's result is checked against a scipy reference objective; a mismatch beyond a

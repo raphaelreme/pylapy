@@ -44,6 +44,21 @@ class LapSolver:
     unmatched at cost `eta`. Backends that cannot apply these (or take rectangular input) natively are
     handled by rewriting the cost matrix via the extensions below.
 
+    Output: links
+    -------------
+
+    Both `solve` and `sparse_solve` return the matching as an `(L, 2)` array of unsigned integers
+    (`uint16`). Each row is a chosen link `(i, j)`: row `i` is matched to column `j`, at cost `dist[i, j]`.
+    The matching is one-to-one, so every row index and every column index appears at most once (one link
+    per row and per column).
+
+    For a plain assignment `L = min(N, M)`, the maximum number of links. A `cost_limit` or
+    `alternative_cost` can leave rows/columns unmatched, so `L < min(N, M)`: unmatched rows/columns simply
+    do not appear in the output. A node is left unlinked when all its feasible links (infeasible = cost `inf`
+    or above `cost_limit`) are already assigned or when an `alternative_cost` makes staying unmatched cheaper.
+    Internally such links land on a finite `inf` sentinel or on a sink row/column and are filtered out
+    before returning.
+
     Extensions
     ----------
 
@@ -183,7 +198,9 @@ class LapSolver:
         """Set the sparse extension, as a `SPARSE_EXTENSIONS` name or a `SparseExtensionProtocol` callable."""
         self._sparse_extension = sparse_extension
 
-    def solve(self, dist: np.ndarray, *, cost_limit=float("inf"), alternative_cost=float("inf")) -> np.ndarray:
+    def solve(
+        self, dist: np.ndarray, eta=None, *, cost_limit=float("inf"), alternative_cost=float("inf")
+    ) -> np.ndarray:
         """Solve the (optionally thresholded) assignment problem for a dense distance matrix.
 
         Two independent parameters decide what happens to a row/column that is not matched (see the class
@@ -209,14 +226,27 @@ class LapSolver:
         Args:
             dist (np.ndarray): Distance matrix.
                 Shape: (N, M), dtype: float
+            eta (float | None): Deprecated. The former alternative threshold. If given, it is mapped to
+                `alternative_cost=eta` (and a `DeprecationWarning` is emitted). Default: None (unused).
             cost_limit (float): Maximum admissible link cost. Default: inf (no cutoff).
             alternative_cost (float): Cost of leaving a row/column unmatched. Default: inf (a node is left
                 unmatched only when it has no admissible link).
 
         Returns:
-            np.ndarray: Links (i, j).
+            np.ndarray: Chosen links as (i, j) pairs; row i is matched to column j at cost dist[i, j].
+                Each row index and each column index appears at most once. Unmatched rows/columns are
+                absent, so L is min(N, M) for a plain assignment and smaller once a cost_limit /
+                alternative_cost leaves nodes unmatched.
                 Shape: (L, 2), dtype: uint16
         """
+        if eta is not None:
+            warnings.warn(
+                "`eta` is deprecated: `solve(dist, eta)` is now `solve(dist, alternative_cost=eta)`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            alternative_cost = eta
+
         dist = dist.copy()
         n, m = dist.shape
         transposed = False
@@ -265,6 +295,9 @@ class LapSolver:
     def sparse_solve(
         self,
         dist: np.ndarray | sparray,
+        eta=None,
+        hard=None,
+        feasible=None,
         *,
         cost_limit=float("inf"),
         alternative_cost=float("inf"),
@@ -292,6 +325,12 @@ class LapSolver:
         Args:
             dist (np.ndarray | sparray): Distance matrix (dense or scipy sparse).
                 Shape: (N, M), dtype: float
+            eta (float | None): Deprecated. The former threshold. If given (optionally with `hard` /
+                `feasible`), the old call is mapped to the parameters below and a `DeprecationWarning` is
+                emitted. Default: None (unused).
+            hard (bool | None): Deprecated. The former hard-thresholding flag (see `eta`). Default: None.
+            feasible (bool | None): Deprecated. The former `assume_feasible` flag (see `eta`).
+                Default: None.
             cost_limit (float): Links above this are discarded.
                 Default: inf.
             alternative_cost (float): Cost of an alternative sink link (leaving a node unmatched); inf
@@ -300,9 +339,26 @@ class LapSolver:
                 is inf and a full matching exists within `cost_limit`. Default: False.
 
         Returns:
-            np.ndarray: Links (i, j).
+            np.ndarray: Chosen links as (i, j) pairs; row i is matched to column j at cost dist[i, j].
+                Each row index and each column index appears at most once. Unmatched rows/columns are
+                absent, so L is min(N, M) for a plain assignment and smaller once a cost_limit /
+                alternative_cost leaves nodes unmatched.
                 Shape: (L, 2), dtype: uint16
         """
+        if eta is not None or hard is not None or feasible is not None:
+            warnings.warn(
+                "`eta`/`hard`/`feasible` are deprecated: `sparse_solve(dist, eta, hard, feasible)` is now "
+                "`sparse_solve(dist, cost_limit=eta, alternative_cost=inf if hard else eta, "
+                "assume_feasible=feasible)`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if eta is None:  # pragma: no cover
+                eta = float("inf")
+            cost_limit = eta
+            alternative_cost = float("inf") if hard else eta
+            assume_feasible = bool(feasible)
+
         # Edge case for empty matrices
         if dist.size == 0:
             return np.zeros((0, 2), dtype=np.uint16)

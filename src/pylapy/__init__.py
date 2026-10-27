@@ -28,11 +28,18 @@ Example:
     >>> links = solver.sparse_solve(dist, cost_limit=0.1)  # drop links above 0.1 and solve sparsely
     >>> cost = dist[links[:, 0], links[:, 1]].sum()
 
+Both methods return the matching as an `(L, 2)` `uint16` array of `(row, col)` links; row `i` is matched
+to column `j` at cost `dist[i, j]`. Each row and each column appears at most once. For a plain assignment
+`L = min(N, M)`; a `cost_limit` / `alternative_cost` can leave rows/columns unmatched, in which case they
+are simply absent from the output (`L < min(N, M)`).
+
 See `LapSolver` for the full API: the `cost_limit` / `alternative_cost` model, the pluggable
 shape/cost/sparse extensions, and per-backend performance notes.
 """
 
-from .solver import LapSolver
+import importlib.metadata
 
-__version__ = "1.1.0"
+from pylapy.solver import LapSolver
+
+__version__ = importlib.metadata.version("pylapy")
 __all__ = ["LapSolver"]

@@ -19,6 +19,7 @@ from conftest import (
     assignment_cost,
     available_dense_backends,
     available_sparse_backends,
+    make_dist,
     soft_objective,
 )
 
@@ -476,3 +477,43 @@ def test_sparse_solve_does_not_mutate_sparse_input(sparse_backend: str) -> None:
         coo, cost_limit=5.0, alternative_cost=5.0, assume_feasible=True
     )
     assert (original.data == coo.data).all()
+
+
+# --------------------------------------------------------------------------------------------------
+# Deprecated v1 API (`eta` / `hard` / `feasible`) — kept as a thin shim over the new parameters
+# --------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("call_style", ["positional", "keyword"])
+def test_solve_deprecated_eta_maps_to_alternative_cost(call_style: str) -> None:
+    # The old positional eta is now the alternative cost.
+    dist = make_dist(5, 6)
+    eta = 10.0
+    solver = LapSolver()
+
+    with pytest.deprecated_call():
+        deprecated = solver.solve(dist, eta) if call_style == "positional" else solver.solve(dist, eta=eta)
+
+    reference = solver.solve(dist, alternative_cost=eta)
+    assert_valid_links(deprecated, *dist.shape)
+    assert np.isclose(soft_objective(dist, deprecated, eta), soft_objective(dist, reference, eta))
+
+
+@pytest.mark.skipif(not SPARSE_BACKENDS, reason="no sparse backend available")
+@pytest.mark.parametrize("sparse_backend", SPARSE_BACKENDS)
+@pytest.mark.parametrize("hard", [False, True])
+def test_sparse_solve_deprecated_eta_mapping(sparse_backend: str, *, hard: bool) -> None:
+    # The old positional eta becomes the cost limit; hard toggles whether an alternative cost is offered.
+    dist = make_dist(8, 10)
+    eta = float(np.median(dist))
+    solver = LapSolver(sparse_implementation=sparse_backend)
+
+    with pytest.deprecated_call():
+        deprecated = solver.sparse_solve(dist, eta, hard, False)
+
+    reference = solver.sparse_solve(
+        dist, cost_limit=eta, alternative_cost=float("inf") if hard else eta, assume_feasible=False
+    )
+    assert_valid_links(deprecated, *dist.shape)
+    assert len(deprecated) == len(reference)
+    assert np.isclose(assignment_cost(dist, deprecated), assignment_cost(dist, reference))

@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "pylapy"
-version = "1.1.0"
+version = "1.2.0"
 description = "Pythonic wrapper around Linear Assignement Problem solvers"
 readme = "README.md"
 authors = [
@@ -55,6 +55,14 @@ lapmod = [
     "scipy",
 ]
 csgraph = [
+    "numba",
+    "scipy",
+]
+
+# Deprecated: kept only for backward compatibility with pylapy v1's `pylapy[sparse]`.
+# Equivalent to the `csgraph` sparse backend (scipy + numba). Will be removed in v2
+# release; depend on `pylapy[csgraph]` (or `[lapmod]`) instead.
+sparse = [
     "numba",
     "scipy",
 ]

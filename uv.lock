@@ -2013,7 +2013,7 @@ wheels = [
 
 [[package]]
 name = "pylapy"
-version = "1.1.0"
+version = "1.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -2059,6 +2059,12 @@ scipy = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
+sparse = [
+    { name = "numba" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -2089,13 +2095,15 @@ requires-dist = [
     { name = "numba", marker = "extra == 'all'" },
     { name = "numba", marker = "extra == 'csgraph'" },
     { name = "numba", marker = "extra == 'lapmod'" },
+    { name = "numba", marker = "extra == 'sparse'" },
     { name = "numpy" },
     { name = "scipy", marker = "extra == 'all'" },
     { name = "scipy", marker = "extra == 'csgraph'" },
     { name = "scipy", marker = "extra == 'lapmod'" },
     { name = "scipy", marker = "extra == 'scipy'" },
+    { name = "scipy", marker = "extra == 'sparse'" },
 ]
-provides-extras = ["lap", "lapjv", "lapsolver", "laprust", "scipy", "lapmod", "csgraph", "all"]
+provides-extras = ["lap", "lapjv", "lapsolver", "laprust", "scipy", "lapmod", "csgraph", "sparse", "all"]
 
 [package.metadata.requires-dev]
 dev = [
