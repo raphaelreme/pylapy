@@ -1,32 +1,58 @@
-"""Cost extension functions to add an alternive non-linking cost.
+"""Cost extension functions to add an alternative non-linking cost.
 
-Adds "sink" columns and rows to the cost matrix (also making it square if it is not the case).
-When a true row/column is linked to a "sink" column/row, it is considered non linked.
+A cost extension adds "sink" rows and columns to the distance matrix (also squaring it). Linking a true
+row/column to a sink means leaving it unassigned, at the alternative cost `eta`. This lets a node stay
+unmatched instead of being forced into an expensive link. The many layouts below are equivalent (they
+yield the same optimal links) but differ in runtime and numerical robustness.
 
-We explore here multiple equivalent ways to set the cost between true nodes and sink nodes.
+Which one to use (see the `benchmark_cost_extension.py` script and `DEFAULT_COST_EXTENSIONS`):
 
-It seems that the fastest method depends on the sparsity of the initial distance and the
-implementation used (scipy/lap/lapjv/lapsolver):
+- `laprust` has a native alternative cost and is fastest with `no_cost_extension` (no explicit sink
+  nodes), by a wide margin.
+- `scipy`, `lap`, `lapjv`: `diag_row_pad_zero` is the fast, robust default (its `fill_row_pad_zero`
+  twin is equivalent and roughly as fast).
+- `lapsolver`: the `diag_split_sparse` is best.
 
-- For lapsolver, `split_cost`, `diag_split_cost` and `symmetric_sparse_extension` are the best
-no matter the sparsity. We decided to use `diag_split_cost` by default.
-- For scipy, `row_cost` and `row_cost_inf` are the best no matter the sparsity. We decided to use
-`row_cost` by default.
-- For lap and lapjv, it truly depends on sparsity. Best choices would be `row_cost` or `diag_row_cost`
-that are the best with sparsity and great without. But we also emphasize `split_cost`, `diag_split_cost`
-and `symmetric_sparse_extension` that are the best without sparsity. You should probably make a choice
-depending on your data. We decided to use `row_cost` by default.
+Avoid the `*_pad_inf` variants with `lapjv`: they are slower and make that backend return wrong
+assignments (it seems to mishandle the inf sentinel). The `*_pad_zero` variants are safe everywhere.
 
-In some cases, other methods seems to be a good choice:
-- `row_cost`: Very similar performances
-- `split_cost`/`symmetric_sparse_extension`: Usually better if the matrix contains very few inf coef (non-sparse)
-    but worse with sparse matrix
+Each function follows `CostExtensionProtocol` and is registered by name in `COST_EXTENSIONS`.
 """
+
+from typing import Protocol
 
 import numpy as np
 
 
-def split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
+class CostExtensionProtocol(Protocol):
+    """Callable that adds alternative-cost sink nodes to a distance matrix.
+
+    It receives the distance matrix, the alternative cost `eta` (the cost of leaving a node unmatched) and
+    the `inf` sentinel value, and returns a square extended matrix; links to sink nodes are stripped from
+    the result by the solver.
+    """
+
+    __name__: str
+
+    def __call__(
+        self,
+        dist: np.ndarray,
+        eta: float,
+        /,
+        inf: float = ...,
+    ) -> np.ndarray:
+        """Return `dist` extended with sink rows/columns so a node can stay unmatched at cost `eta`."""
+
+
+def no_cost_extension(dist: np.ndarray, eta: float, inf: float = float("inf")) -> np.ndarray:  # noqa: ARG001
+    """Do not extend the distance and let the backend internally solve the problem with alternative cost.
+
+    Only lap and laprust have an internal support for alternative cost.
+    """
+    return dist
+
+
+def fill_split(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
     """Extend to a (n + m, n + m) by splitting the cost limit on rows and columns.
 
     dist -> |  dist  , eta / 2 |
@@ -34,12 +60,10 @@ def split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
 
     This is the implementation in lap v0.5.0.
 
-    One of the fastest choice with non-sparse matrix.
-
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -56,7 +80,7 @@ def split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     return extended_dist
 
 
-def diag_split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def diag_split(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by splitting the cost limit in diagonal block.
 
     dist -> |     dist     , Diag(eta / 2) |
@@ -68,12 +92,10 @@ def diag_split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.nda
                      | ... ... ... inf |
                      | inf ... inf eta |
 
-    One of the fastest choice with non-sparse matrix (Sligthly faster than `split_cost`).
-
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -91,7 +113,7 @@ def diag_split_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.nda
     return extended_dist
 
 
-def symmetric_sparse_extension(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def diag_split_sparse(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by keeping a maximum of sparsity by symmetry.
 
     dist -> |     dist     , Diag(eta / 2) |
@@ -102,14 +124,15 @@ def symmetric_sparse_extension(dist: np.ndarray, eta: float, inf: float = np.inf
                      | ... ... ... inf |
                      | inf ... inf eta |
 
-    The only implementation that enable sparsity and a square matrix. (And therefore the only choice for lapmod)
-    (Note that we rather use the sparse implementation of this method)
-    It is also one of the fastest choice if your matrix is dense.
+    Adds very few non-inf cost: it is sparse compatible.
+
+    The only implementation that enable sparsity and a square matrix; and therefore the only choice for lapmod.
+    (Note that we rather use the sparse implementation of this method, see `pylapy.sparse`)
 
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -127,19 +150,18 @@ def symmetric_sparse_extension(dist: np.ndarray, eta: float, inf: float = np.inf
     return extended_dist
 
 
-def row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
+def fill_row_pad_zero(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
     """Extend to a (n + m, n + m) by setting the cost limit on the rows.
 
     dist -> | dist, eta |
             |  0  ,  0  |
 
-    One of the fastest choice when your matrix is sparse (except with lapsolver).
-    Also great with non-sparse matrix and scipy.
+    One of the fastest choice (except for lapsolver backend).
 
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -155,19 +177,18 @@ def row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  
     return extended_dist
 
 
-def row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def fill_row_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by setting the cost limit on the rows and inf eveywhere else.
 
     dist -> | dist, eta |
             | inf , inf |
 
     Equivalent to the implementation in lap v0.4.0.
-    Usually leads to more computation with lap and lapjv. But one of the fastest with scipy.
 
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -183,18 +204,16 @@ def row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarra
     return extended_dist
 
 
-def col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
+def fill_col_pad_zero(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  # noqa: ARG001
     """Extend to a (n + m, n + m) by setting the cost limit on the columns.
 
     dist -> | dist, 0 |
             | eta , 0 |
 
-    Usually leads to more computation, you should rather use another variant. (See module doctring).
-
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -210,18 +229,16 @@ def col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:  
     return extended_dist
 
 
-def col_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def fill_col_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by setting the cost limit on the columns and inf eveywhere else.
 
     dist -> | dist, inf |
             | eta , inf |
 
-    Usually leads to more computation, you should rather use another variant. (See module doctring).
-
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -237,7 +254,7 @@ def col_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarra
     return extended_dist
 
 
-def diag_row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def diag_row_pad_zero(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows.
 
     dist -> | dist, Diag(eta) |
@@ -248,12 +265,12 @@ def diag_row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarr
                      | ... ... ... inf |
                      | inf ... inf eta |
 
-    One of the fastest choice with sparsity (except with lapsolver). Usually faster than `row_cost`.
+    One of the fastest choice (except for lapsolver backend) and the default for scipy/lap/lapjv.
 
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -270,7 +287,7 @@ def diag_row_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarr
     return extended_dist
 
 
-def diag_row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def diag_row_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by setting the cost limit on the diagonal rows and inf eveywhere else.
 
     dist -> | dist, Diag(eta) |
@@ -281,12 +298,12 @@ def diag_row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.n
                      | ... ... ... inf |
                      | inf ... inf eta |
 
-    One of the fastest with scipy, but much slower with other implementations.
+    Adds very few non-inf cost: it is sparse compatible.
 
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -302,18 +319,16 @@ def diag_row_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.n
     return extended_dist
 
 
-def diag_col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def diag_col_pad_0(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns.
 
     dist -> |   dist   , 0 |
             | Diag(eta), 0 |
 
-    Usually leads to more computation, you should rather use another variant. (See module doctring).
-
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -330,18 +345,18 @@ def diag_col_cost(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarr
     return extended_dist
 
 
-def diag_col_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
+def diag_col_pad_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.ndarray:
     """Extend to a (n + m, n + m) by setting the cost limit on the diagonal columns and inf eveywhere else.
 
     dist -> |   dist   , inf |
             | Diag(eta), inf |
 
-    Usually leads to more computation, you should rather use another variant. (See module doctring).
+    Adds very few non-inf cost: it is sparse compatible.
 
     Args:
         dist (np.ndarray): Distance matrix to extend
             Shape: (N, M), dtype: float
-        eta (float): Cost limit
+        eta (float): Alternative cost.
         inf (float): Current inf value
             Default: np.inf
 
@@ -355,3 +370,31 @@ def diag_col_cost_inf(dist: np.ndarray, eta: float, inf: float = np.inf) -> np.n
     np.fill_diagonal(extended_dist[n:, :m], eta)
 
     return extended_dist
+
+
+COST_EXTENSIONS: dict[str, CostExtensionProtocol] = {
+    "none": no_cost_extension,
+    "fill_split": fill_split,
+    "diag_split": diag_split,
+    "diag_split_sparse": diag_split_sparse,
+    "fill_row_pad_zero": fill_row_pad_zero,
+    "fill_row_pad_inf": fill_row_pad_inf,
+    "fill_col_pad_zero": fill_col_pad_zero,
+    "fill_col_pad_inf": fill_col_pad_inf,
+    "diag_row_pad_zero": diag_row_pad_zero,
+    "diag_row_pad_inf": diag_row_pad_inf,
+    "diag_col_pad_0": diag_col_pad_0,
+    "diag_col_pad_inf": diag_col_pad_inf,
+}
+
+# From the cost extension benchmark. Only lap and laprust have internal cost extension.
+# laprust internal is much faster than ours. Otherwise diag_row_pad_zero (or fill_row_pad_zero)
+# is the best extension for most methods (outperforms the internal lap)
+# lapsolver is faster with diag_split_sparse.
+DEFAULT_COST_EXTENSIONS: dict[str, CostExtensionProtocol] = {
+    "scipy": diag_row_pad_zero,
+    "lap": diag_row_pad_zero,
+    "lapjv": diag_row_pad_zero,
+    "lapsolver": diag_split_sparse,
+    "laprust": no_cost_extension,  # internal cost_limit
+}

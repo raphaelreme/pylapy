@@ -1,83 +1,108 @@
+from __future__ import annotations
+
 import importlib
 import warnings
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
-from .cost_extension import diag_split_cost, row_cost
-from .shape_extension import smallest_fill_0, smallest_fill_inf
+from pylapy.cost_extension import COST_EXTENSIONS, DEFAULT_COST_EXTENSIONS
+from pylapy.shape_extension import DEFAULT_SHAPE_EXTENSIONS, SHAPE_EXTENSIONS
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from pylapy.cost_extension import CostExtensionProtocol
+    from pylapy.shape_extension import ShapeExtensionProtocol
+    from pylapy.sparse import SparseExtensionProtocol, sparray
 
-    import scipy.sparse
 
-
-# TODO: improve docs for soft threshold/cost extension -> Also can we test to indeed cut links above eta?
 class LapSolver:
-    """Solves assignement problem with Hungarian algorithm (JV variants).
+    """Unified solver for the Linear Assignment Problem (Jonker-Volgenant and friends).
 
-    This class is a wrapper around different implementations: lapjv, lap, scipy, lapsolver.
-    It also supports sparse implementations: csgraph (scipy) and lapmod (lap).
+    A thin wrapper over several LAP backends, all currently provided by `lapx` and `scipy`:
 
-    It unifies the functionality of each implementation and allows you to use the one which is the fastest
-    on your problem.
+    - dense: `laprust` (lapx), `lap` (lapx), `lapjv` (lapx), `scipy` (scipy), `lapsolver` (lapx)
+    - sparse: `lapmod` (lapx), `csgraph` (scipy)
 
-    It also helps you to handle non square matrices and setting a soft threshold on assignements (usually leads
-    to better performances than hard thresholding).
+    It exposes a single interface (`solve` / `sparse_solve`), lets you pick (or auto-detect) the backend,
+    and transparently handles rectangular matrices and `inf` entries.
 
-    Handling non square matrices
-    ----------------------------
+    Cost limit and alternative cost
+    -------------------------------
 
-    We provide several shape extension functions to convert a rectangular problem into a solvable square one.
-    By default, we use the fastest one for the implementation you use. You can build your own or enforce another one
-    by setting `shape_extension` attribute. Please have a look at `shape_extension` module and
-    `benchmark_shape_extension` script.
+    Both `solve` and `sparse_solve` take two optional, independent parameters (both default to `inf`):
 
-    Handling soft thresholding
-    --------------------------
+    - `cost_limit`: thresholds the distances. Any link with a cost above `cost_limit` is discarded; a node
+      with no remaining link is left unmatched.
+    - `alternative_cost`: the cost of an alternative "sink" link, i.e. of leaving a row/column unmatched. A
+      node is matched only when its best remaining link is cheaper than this. With `alternative_cost=inf`
+      no alternative is offered (a node is left unmatched only when it has no remaining link).
 
-    Rather than applying hard thresholding and cut links that are above a threshold `eta`, it is common and usually
-    better to assign a row or a column to "no one" with a cost `eta`. This is done by adding "sink" rows and columns.
-    When a true row/column is linked to a "sink" column/row, it is considered non linked.
+    By definition, `alternative_cost` superseds `cost_limit` as it prevents any link with higher cost.
 
-    Adding these sink nodes can be done multiple ways resulting in equivalent links but different run time.
-    We explore several of them in the `cost_extension` module and use the expected fastest for your implementation.
-    You can build your own extension or enforce another one by setting the `cost_extension`
-    attribute. Please have a look at `cost_extension` module and `benchmark_cost_extension` script.
+    So `solve(dist)` is a plain full assignment, `solve(dist, cost_limit=eta)` discards links above `eta`
+    (matching as many of the rest as possible), and `solve(dist, alternative_cost=eta)` lets a node stay
+    unmatched at cost `eta`. Backends that cannot apply these (or take rectangular input) natively are
+    handled by rewriting the cost matrix via the extensions below.
+
+    Extensions
+    ----------
+
+    `shape_extension`, `cost_extension` and `sparse_extension` can each be set to a registry name (str) or
+    to your own callable (see the matching module and `benchmark` scripts). Sensible defaults are chosen
+    per backend; where a backend applies a cost limit, alternative cost or rectangular input natively,
+    that native path is used by default.
+    `enforce_less_row_than_col` (default True) transposes the problem internally so there are fewer rows
+    than columns, which is faster for several backends and never changes the result.
 
     Time performances
     -----------------
 
-    From our current benchhmarks, scipy, lap and lapjv are pretty fast and depending on the context,
-    one is slightly faster than the others. Lapsolver is usually slower and is much slower with sparsity
-    or cost limit.
+    From the `benchmark` studies:
+
+    - `laprust` is the best general-purpose default: fastest (or tied) both for plain assignment and with
+      an alternative cost (its native cost limit avoids any dense rewrite).
+    - Its one weak spot is a dense problem that only sets a cost limit (`alternative_cost=inf`), where it
+      degrades at scale. For such discarded-link / sparse problems prefer a sparse backend (`csgraph` or
+      `lapmod`); `scipy` is a decent dense fallback.
+    - `lap` and `scipy` are competitive for plain assignment but much slower once a cost extension
+      is involved; `lapsolver` is consistently the slowest; `lapjv` is slow and can return wrong
+      assignments on cost-limited / inf-heavy problems.
+    - Sparse backends carry a small constant overhead, so they only pay off from a few hundred nodes up.
 
     Attributes:
-        implementations (dict[str, str]): All implementations supported by the class. Maps the name to the module
-        implementation (str): Implementation to use. It not provided, a suitable one is
-            found by iterating in order through `implementations`.
-        shape_extension (Callable[[np.ndarray, float], np.ndarray]): Called to convert rectangular
-            lap problem into square ones (See `Handling non square matrix` and `shape_extension` module)
-        cost_extension (Callable[[np.ndarray, float], np.ndarray]): Called to add soft thresholding
-            (See `Handling soft thresholding` and `cost_extension` module)
+        implementations (dict[str, str]): Supported dense backends, mapping name -> importable module.
+            Iterated in order to auto-select a backend when none is given.
+        sparse_implementations (dict[str, str]): Supported sparse backends, likewise.
+        implementation (str): The selected dense backend.
+        sparse_implementation (str | None): The selected sparse backend (None if none is importable).
+        shape_extension (ShapeExtensionProtocol): Rectangular -> square rewrite (name or callable).
+        cost_extension (CostExtensionProtocol): Alternative-cost sink rewrite (name or callable).
+        sparse_extension (SparseExtensionProtocol): Sparse gated/sink rewrite (name or callable).
+        enforce_less_row_than_col (bool): Transpose internally to keep rows <= columns. Default: True.
 
     """
 
+    # We now rely on lapx (rathaROG/lapx) for a stable implementation of:
+    # 1. lap & lapmod (gatagat/lap)
+    # 2. lapjv (src-d/lapjv)
+    # 3. lapsolver (cheind/py-lapsolver)
+    # 4. laprust (rathaROG/lapx)
     implementations: ClassVar = {
-        "lapjv": "lapjv",
+        "laprust": "lap",
         "lap": "lap",
         "scipy": "scipy.optimize",
-        "lapsolver": "lapsolver",
+        "lapsolver": "lap",  # The slowest option
+        "lapjv": "lap",  # Let's put lapjv last: it is unreliable.
     }
     sparse_implementations: ClassVar = {
-        "csgraph": "scipy.sparse.csgraph",
         "lapmod": "lap",
+        "csgraph": "scipy.sparse.csgraph",
     }
 
-    def __init__(self, implementation: str | None = None, sparse_implementation: str | None = None) -> None:  # noqa: C901
+    def __init__(self, implementation: str | None = None, sparse_implementation: str | None = None) -> None:
         self.implementation = implementation
         self.sparse_implementation = sparse_implementation
+        self.enforce_less_row_than_col = True
 
         if self.implementation:
             importlib.import_module(self.implementations[self.implementation])
@@ -105,173 +130,241 @@ class LapSolver:
                 except ImportError:
                     pass
 
-        self.shape_extension: Callable[[np.ndarray, float], np.ndarray] = smallest_fill_0
-        self.cost_extension: Callable[[np.ndarray, float, float], np.ndarray] = row_cost
-        self.sparse_extension: str | Callable[[Any, float, bool], "scipy.sparse.coo_matrix"] = "symmetric_cost"  # noqa: UP037
+        self._shape_extension: str | ShapeExtensionProtocol = DEFAULT_SHAPE_EXTENSIONS.get(
+            self.implementation, "smallest_fill_zero"
+        )
+        self._cost_extension: str | CostExtensionProtocol = DEFAULT_COST_EXTENSIONS.get(
+            self.implementation, "diag_row_pad_zero"
+        )
 
-        # For scipy and lapsolver the default ones are too slow. See benchmarks.
-        if self.implementation == "scipy":
-            self.shape_extension = smallest_fill_inf
-        if self.implementation == "lapsolver":
-            self.cost_extension = diag_split_cost
-        if self.sparse_implementation == "csgraph":  # Scipy supports non-square matrices and it is faster
-            self.sparse_extension = "diag_row_cost"  # Note: symmetric can be faster with extra sparse problems
+        # Let's not rely on the DEFAULT_SPARSE_EXTENSION to avoid import
+        self._sparse_extension: str | SparseExtensionProtocol = (
+            "diag_row_no_pad" if self.sparse_implementation == "csgraph" else "diag_split_sparse"
+        )
 
-    def solve(self, dist: np.ndarray, eta=float("inf")) -> np.ndarray:
-        """Solve the assignment problem for the given distances.
+    @property
+    def shape_extension(self) -> ShapeExtensionProtocol:
+        """Shape extension callable (rectangular -> square), resolving a registry name to its function."""
+        if isinstance(self._shape_extension, str):
+            return SHAPE_EXTENSIONS[self._shape_extension]
 
-        Handle inf values by replacing them by the sum of all non inf values + 1 so that we only choose
-        one when no other choice is possible.
+        return self._shape_extension
 
-        One can give a soft threshold `eta` which represents the cost of linking row i or column j to "no one".
-        The matrix is extended using `cost_extension` attribute: see `Handling soft thresholding`.
+    @shape_extension.setter
+    def shape_extension(self, shape_extension: str | ShapeExtensionProtocol) -> None:
+        """Set the shape extension, as a `SHAPE_EXTENSIONS` name or a `ShapeExtensionProtocol` callable."""
+        self._shape_extension = shape_extension
 
-        If a non-square matrix is given without `eta` then the matrix is extended into a square one
-        using `shape_extension` attribute: see `Handling non square matrix`.
+    @property
+    def cost_extension(self) -> CostExtensionProtocol:
+        """Cost extension callable (alternative-cost sinks), resolving a registry name to its function."""
+        if isinstance(self._cost_extension, str):
+            return COST_EXTENSIONS[self._cost_extension]
 
-        Links returned are only the valid links (no inf link nor link to "no one").
+        return self._cost_extension
+
+    @cost_extension.setter
+    def cost_extension(self, cost_extension: str | CostExtensionProtocol) -> None:
+        """Set the cost extension, as a `COST_EXTENSIONS` name or a `CostExtensionProtocol` callable."""
+        self._cost_extension = cost_extension
+
+    @property
+    def sparse_extension(self) -> SparseExtensionProtocol:
+        """Sparse extension callable (gated COO + sink edges), resolving a registry name to its function."""
+        import pylapy.sparse  # noqa: PLC0415
+
+        if isinstance(self._sparse_extension, str):
+            return pylapy.sparse.SPARSE_EXTENSIONS[self._sparse_extension]
+
+        return self._sparse_extension
+
+    @sparse_extension.setter
+    def sparse_extension(self, sparse_extension: str | SparseExtensionProtocol) -> None:
+        """Set the sparse extension, as a `SPARSE_EXTENSIONS` name or a `SparseExtensionProtocol` callable."""
+        self._sparse_extension = sparse_extension
+
+    def solve(self, dist: np.ndarray, *, cost_limit=float("inf"), alternative_cost=float("inf")) -> np.ndarray:
+        """Solve the (optionally thresholded) assignment problem for a dense distance matrix.
+
+        Two independent parameters decide what happens to a row/column that is not matched (see the class
+        docstring):
+
+        - `cost_limit`: links with a cost above it are forbidden; a node with no admissible link is left
+          unmatched.
+        - `alternative_cost`: the cost of leaving a node unmatched. A node is matched only when its best
+          admissible link is cheaper than this. Nodes with admissible links lower than this alternative cost
+          can also be skipped if they induce larger cost in the global assignement.
+
+        By definition, `alternative_cost` superseds `cost_limit` as it prevents any link with higher cost.
+
+        Common uses: `solve(dist)` (full assignment), `solve(dist, cost_limit=eta)` (discard links above
+        `eta`), `solve(dist, alternative_cost=eta)` (a node may stay unmatched at cost `eta`).
+
+        Rectangular matrices and `inf` entries are handled transparently: `inf` (and above-`cost_limit`)
+        entries are replaced internally by a large finite sentinel, the matrix is squared with
+        `shape_extension` (or by the backend) and/or `cost_extension` as needed, and the links are mapped
+        back. The returned links are the real feasible ones only (never a padding/sink node, never a cost
+        above `cost_limit`).
 
         Args:
-            dist (np.ndarray): Distance matrix
+            dist (np.ndarray): Distance matrix.
                 Shape: (N, M), dtype: float
-            eta (float): Soft thresholding (Add the possibility to link with no one with a cost eta)
-                Default: inf (No soft thresholding)
+            cost_limit (float): Maximum admissible link cost. Default: inf (no cutoff).
+            alternative_cost (float): Cost of leaving a row/column unmatched. Default: inf (a node is left
+                unmatched only when it has no admissible link).
 
         Returns:
-            np.ndarray: Links (i, j)
+            np.ndarray: Links (i, j).
                 Shape: (L, 2), dtype: uint16
         """
         dist = dist.copy()
         n, m = dist.shape
+        transposed = False
 
-        # Handle 0 dimensions (Is almost handled by shape extension or/and backends but not fully)
-        if min(n, m) == 0:
+        # Edge case for empty matrices
+        if dist.size == 0:
             return np.zeros((0, 2), dtype=np.uint16)
 
-        # Replace inf as most lib do not support it well
+        # inf defined as a large enough value (inf is not supported by many backend)
         inf = dist[dist != np.inf].sum() + 1
-        dist[dist == np.inf] = inf
 
-        links: np.ndarray
+        if not np.isinf(cost_limit):
+            dist[dist > cost_limit] = inf
+        else:
+            dist[dist == np.inf] = inf  # Replace pre-existing inf in dist
 
-        if not np.isinf(eta) or n != m:  # Extend the matrix if needed or asked
-            if np.isinf(eta):  # n != m and full linking -> shape extension  # noqa: SIM108
-                extended_dist = self.shape_extension(dist, inf)
-            else:  # non full linking -> cost extension (also directly handles rectangular shapes)
-                extended_dist = self.cost_extension(dist, eta, inf)
+        if n > m and self.enforce_less_row_than_col:  # Transpose to solve with fewer rows
+            dist = dist.T
+            m, n = n, m
+            transposed = True
 
-            links = getattr(self, f"_{self.implementation}")(extended_dist)
+        if not np.isinf(alternative_cost):
+            dist = self.cost_extension(dist, alternative_cost, inf)
+            if dist.shape != (n, m):  # Externally handled
+                alternative_cost = float("inf")  # so the solver should not extend it.
 
-            # Filter links that are assigned outside of C
+        if dist.shape[0] != dist.shape[1]:  # If still not squared
+            dist = self.shape_extension(dist, inf)
+
+        links: np.ndarray = getattr(self, f"_{self.implementation}")(dist, alternative_cost)
+
+        if dist.shape != (n, m):  # Dist was extended, so let's remove the links to sink nodes.
             links = links[links[:, 0] < n]  # i < n
             links = links[links[:, 1] < m]  # j < m
-        else:  # No extension, the implementation can be called directly
-            links = getattr(self, f"_{self.implementation}")(dist)
 
-        # Filter inf links
+        # Filter links with inf cost
         links = links[dist[links[:, 0], links[:, 1]] < inf]
+
+        if transposed:  # Transpose back the links
+            links = links[:, ::-1]
 
         return links
 
-    def sparse_solve(self, dist: np.ndarray, eta: float, hard=False, feasible=False) -> np.ndarray:
-        """Solve a sparse linear assignment problem for the given distance.
+    def sparse_solve(
+        self,
+        dist: np.ndarray | sparray,
+        *,
+        cost_limit=float("inf"),
+        alternative_cost=float("inf"),
+        assume_feasible: bool = False,
+    ) -> np.ndarray:
+        """Sparse analogue of `solve`: same `cost_limit` / `alternative_cost` parameters, sparse backend.
 
-        It will remove all links that are greater than `eta` to build a sparse cost matrix.
+        `cost_limit` and `alternative_cost` mean exactly what they do in `solve`. Entries above
+        min(`cost_limit`, `alternative_cost`) are dropped to build the sparse matrix, so a finite limit
+        is what makes the problem sparse (or pass an already-sparse `dist`, whose stored entries are taken
+        as the remaining links). A finite `alternative_cost` adds an alternative sink link at that cost.
+        `alternative_cost=inf` offers no alternative.
 
-        By default, `eta` is used as a soft threshold, which represents the cost of linking row i
-        or column j to "no one". This can be disabled to maximize the number of links no matter the
-        cost, using `hard=True`.
+        Without an alternative cost, a sparse problem can be infeasible (a row with no remaining link),
+        which breaks the backends; by default sink edges are added to keep it solvable (these edges are
+        priced very high and used only as a last resort, for feasibility). If you already know
+        a full matching exists within `cost_limit` (e.g. via
+        `scipy.sparse.csgraph.maximum_bipartite_matching`), pass `assume_feasible=True` to skip the sink
+        extension and solve the gated matrix directly (faster). It is ignored when `alternative_cost` is
+        finite (sinks are then required by design).
 
-        Typical implementation of sparse lapjv assumes that the matrix is squared, or at least fully
-        feasible (the maximum number of links is min(N, M)). This is usually not the case in real life
-        problems. In this code, we relax these assumptions, by extending the distance and adding "sink" nodes.
-
-        The distance matrix is extended for soft thresholding, or for hard thresholding if feasible is False.
-        By default, feasible is False and the distance is extended. It is up to the user to know if the input distance
-        is feasible without adding sink nodes (for instance with scipy.csgraph.maximum_bipartite_matching(csr)).
-
-        Links returned are only the valid links (no inf link nor link to "no one").
+        Falls back to the dense `solve` (with a warning) if no sparse backend is available and `dist` is
+        dense.
 
         Args:
-            dist (np.ndarray | scipy.sparse.spmatrix): Distance matrix. If a sparse matrix is given
-                we do not check that elements are all below eta.
+            dist (np.ndarray | sparray): Distance matrix (dense or scipy sparse).
                 Shape: (N, M), dtype: float
-            eta (float): Cost limit (soft thresholding or hard thresholding)
-                No links will be made above this value. In soft thresholding, a link with a smaller value
-                can also be avoided if it allows to save more than eta in cost in thefull graph.
-            hard (bool): Do hard thresholding
-                Default: False (Soft thresholding with sink nodes)
-            feasible (bool): Whether the provided distance is fully feasible or not. (maximum number of links
-                is min(N, M)).
-                Default: False
+            cost_limit (float): Links above this are discarded.
+                Default: inf.
+            alternative_cost (float): Cost of an alternative sink link (leaving a node unmatched); inf
+                offers no alternative. Default: inf.
+            assume_feasible (bool): Skip the feasibility sink extension; valid only when `alternative_cost`
+                is inf and a full matching exists within `cost_limit`. Default: False.
 
         Returns:
-            np.ndarray: Links (i, j)
+            np.ndarray: Links (i, j).
                 Shape: (L, 2), dtype: uint16
-
         """
+        # Edge case for empty matrices
+        if dist.size == 0:
+            return np.zeros((0, 2), dtype=np.uint16)
+
         if not self.sparse_implementation:
-            warnings.warn("No implementation found for sparse solving. Falling back to dense solving...", stacklevel=2)
+            if isinstance(dist, np.ndarray):
+                warnings.warn("No sparse implementation available. Falling back to dense solving...", stacklevel=2)
+                return self.solve(dist, cost_limit=cost_limit, alternative_cost=alternative_cost)
 
-            if hard:
-                dist = np.array(dist)
-                dist[dist < eta] = np.inf
-                return self.solve(dist)
-
-            return self.solve(np.asarray(dist), eta)
+            # Importing sparse_to_dense won't work, as scipy and numba are probably not available
+            raise ValueError("No sparse implementation available. Please convert to dense matrix.")
 
         # Scipy and numba are required
         import scipy.sparse  # noqa: PLC0415
 
-        from . import sparse  # noqa: PLC0415
+        import pylapy.sparse  # noqa: PLC0415
 
         n, m = dist.shape
+        transposed = False
 
-        if not hard or not feasible:
-            if callable(self.sparse_extension):
-                coo = self.sparse_extension(dist, eta, hard)
-                if not scipy.sparse.issparse(coo):
-                    raise ValueError("The provided sparse_extension did not return a sparse matrix")
+        if n > m and self.enforce_less_row_than_col:  # Transpose to solve with fewer rows
+            dist = dist.T
+            m, n = n, m
+            transposed = True
 
-                coo = coo.tocoo()
-            else:
-                coo = sparse.sparse_extension(dist, eta, hard, self.sparse_extension)
-        else:  # noqa: PLR5501
-            if isinstance(dist, np.ndarray):
-                values, cols, rows = sparse.dense_to_coo(dist, eta)
-                coo = scipy.sparse.coo_matrix((np.array(values, dtype=np.float32), (rows, cols)), shape=(n, m))  # type: ignore[arg-type]
-            elif scipy.sparse.issparse(dist):
-                coo = dist.tocoo()
-                if (coo.data > eta).any():  # Up to the user to handle this
-                    warnings.warn("Found some values greater than the cost limit in the sparse format", stacklevel=2)
-            else:
-                raise ValueError(f"Dist should be a numpy array or a scipy sparse matrix. Found {type(dist)}.")
+        if np.isinf(alternative_cost) and assume_feasible:  # Let's trust the user and try to solve the direct problem
+            # Let's convert to coo and removing invalid values (> cost_limit or inf).
+            values, rows, cols = pylapy.sparse._to_coo_format(dist, cost_limit)  # noqa: SLF001
+            dist = scipy.sparse.coo_array((values, (rows, cols)), dist.shape, dist.dtype)
+        else:  # Let's do a cost_extension
+            # alternative_cost=inf: no alternative sink, only the cost_limit threshold on the distances.
+            dist = self.sparse_extension(dist, cost_limit=cost_limit, alternative_cost=alternative_cost)
 
-        coo.data += 0.1  # Add 0.1 to all values because 0 can be a tricky value
-
-        if len(coo.data) == 0:
+        # Edge case for empty matrices (after thresholding)
+        if dist.size == 0:
             return np.zeros((0, 2), dtype=np.uint16)
 
-        links = getattr(self, f"_{self.sparse_implementation}")(coo.tocsr())
+        links: np.ndarray = getattr(self, f"_{self.sparse_implementation}")(dist)
 
-        # Filter links that are assigned outside of C
-        links = links[links[:, 0] < n]  # i < n
-        links = links[links[:, 1] < m]  # j < m
+        if dist.shape != (n, m):  # Dist was extended, so let's remove the links to sink nodes.
+            links = links[links[:, 0] < n]  # i < n
+            links = links[links[:, 1] < m]  # j < m
 
-        return links  # noqa: RET504
+        if transposed:  # Transpose back the links
+            links = links[:, ::-1]
+
+        return links
 
     @staticmethod
-    def _lap(dist: np.ndarray) -> np.ndarray:
+    def _lap(dist: np.ndarray, alternative_cost: float = float("inf")) -> np.ndarray:
         """Solve with lap (https://github.com/gatagat/lap).
 
-        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx.
+        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx, which
+              provides the equivalent `lap.lapjvxa` method.
 
         You should not call this method directly. To enforce using lap,
         rather set `implementation` attribute to "lap" and call `solve`.
 
+        This backend internally supports for rectangular (N != M) matrices and alternative_cost.
+
         Args:
-            dist (np.ndarray): Dist matrix
-                Shape: (N, N), dtype: float
+            dist (np.ndarray): Distance matrix.
+                Shape: (N, M), dtype: float
+            alternative_cost (float): Passed to the backend as its native cost limit (inf = no limit).
 
         Returns:
             np.ndarray: Links (i, j)
@@ -279,60 +372,59 @@ class LapSolver:
         """
         import lap  # noqa: PLC0415
 
-        x: np.ndarray
-
-        _, x, _ = lap.lapjv(dist)
-
-        # Note that -1 are returned by lap when no link is made
-        # In our case as we handle it ourselves, no -1 should be found
-        if (x == -1).any():
-            warnings.warn(
-                "-1 found in _lap. Should not occur except if you have called yourself the function.", stacklevel=2
-            )
-
-        i = np.arange(x.shape[0])[x != -1]
-        j = x[x != -1]
-
-        return np.array([i, j], dtype=np.uint16).transpose()
+        return lap.lapjvxa(dist, extend_cost=True, cost_limit=alternative_cost, return_cost=False).astype(np.uint16)
 
     @staticmethod
-    def _lapjv(dist: np.ndarray) -> np.ndarray:
+    def _lapjv(dist: np.ndarray, alternative_cost: float = float("inf")) -> np.ndarray:
         """Solve with lapjv (https://github.com/src-d/lapjv).
+
+        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx, which
+              provides the equivalent `lap.lapjvxa` method.
 
         You should not call this method directly. To enforce using lapjv,
         rather set `implementation` attribute to "lapjv" and call `solve`.
 
+        This backend internally supports for rectangular (N != M) matrices but not alternative_cost.
+
         Args:
-            dist (np.ndarray): Dist matrix
-                Shape: (N, N), dtype: float
+            dist (np.ndarray): Distance matrix
+                Shape: (N, M), dtype: float
+            alternative_cost (float): Must be inf; this backend has no native alternative cost (raises
+                otherwise). Set a `cost_extension` to support one.
 
         Returns:
             np.ndarray: Links (i, j)
                 Shape: (L, 2), dtype: uint16
         """
-        import lapjv  # type: ignore[import-not-found]  # noqa: PLC0415
+        if not np.isinf(alternative_cost):
+            raise ValueError("Lapjv backend do not support internal alternative cost. Please set a `cost_extension`.")
 
-        x, _, _ = lapjv.lapjv(dist)
-        i = np.arange(x.shape[0])
-        j = x
+        import lap  # noqa: PLC0415
 
-        return np.array([i, j], np.uint16).transpose()
+        return lap.lapjvsa(dist, extend_cost=True, return_cost=False).astype(np.uint16)
 
     @staticmethod
-    def _scipy(dist: np.ndarray) -> np.ndarray:
+    def _scipy(dist: np.ndarray, alternative_cost: float = float("inf")) -> np.ndarray:
         """Solve with scipy (scipy.optimize.linear_sum_assignment).
 
         You should not call this method directly. To enforce using scipy,
         rather set `implementation` attribute to "scipy" and call `solve`.
 
+        This backend internally supports for rectangular (N != M) matrices but not alternative_cost.
+
         Args:
-            dist (np.ndarray): Dist matrix
-                Shape: (N, N), dtype: float
+            dist (np.ndarray): Distance matrix
+                Shape: (N, M), dtype: float
+            alternative_cost (float): Must be inf; this backend has no native alternative cost (raises
+                otherwise). Set a `cost_extension` to support one.
 
         Returns:
             np.ndarray: Links (i, j)
                 Shape: (L, 2), dtype: uint16
         """
+        if not np.isinf(alternative_cost):
+            raise ValueError("Scipy backend do not support internal alternative cost. Please set a `cost_extension`.")
+
         import scipy.optimize  # noqa: PLC0415
 
         i, j = scipy.optimize.linear_sum_assignment(dist)
@@ -340,17 +432,49 @@ class LapSolver:
         return np.array([i, j], dtype=np.uint16).transpose()
 
     @staticmethod
-    def _lapsolver(dist: np.ndarray) -> np.ndarray:
+    def _lapsolver(dist: np.ndarray, alternative_cost: float = float("inf")) -> np.ndarray:
         """Solve with lapsolver (https://github.com/cheind/py-lapsolver).
 
-        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx.
+        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx, which
+              provides the equivalent `lap.lapjvc` method.
 
         You should not call this method directly. To enforce using lapsolver,
         rather set `implementation` attribute to "lapsolver" and call `solve`.
 
+        This backend internally supports for rectangular (N != M) matrices but not alternative_cost.
+
         Args:
-            dist (np.ndarray): Dist matrix
-                Shape: (N, N), dtype: float
+            dist (np.ndarray): Distance matrix
+                Shape: (N, M), dtype: float
+            alternative_cost (float): Must be inf; this backend has no native alternative cost (raises
+                otherwise). Set a `cost_extension` to support one.
+
+        Returns:
+            np.ndarray: Links (i, j)
+                Shape: (L, 2), dtype: uint16
+        """
+        if not np.isinf(alternative_cost):
+            raise ValueError(
+                "LapSolver backend do not support internal alternative cost. Please set a `cost_extension`."
+            )
+
+        import lap  # noqa: PLC0415
+
+        return np.stack(lap.lapjvc(dist, return_cost=False)).T.astype(np.uint16)
+
+    @staticmethod
+    def _laprust(dist: np.ndarray, alternative_cost: float = float("inf")) -> np.ndarray:
+        """Solve with laprust (https://github.com/rathaROG/lapx).
+
+        You should not call this method directly. To enforce using laprust,
+        rather set `implementation` attribute to "laprust" and call `solve`.
+
+        This backend internally supports for rectangular (N != M) matrices and alternative_cost.
+
+        Args:
+            dist (np.ndarray): Distance matrix
+                Shape: (N, M), dtype: float
+            alternative_cost (float): Passed to the backend as its native cost limit (inf = no limit).
 
         Returns:
             np.ndarray: Links (i, j)
@@ -358,20 +482,24 @@ class LapSolver:
         """
         import lap  # noqa: PLC0415
 
-        i, j = lap.lapjvc(dist, return_cost=False)
-
-        return np.array([i, j], np.uint16).transpose()
+        return lap.lapjvr(
+            dist, extend_cost=True, cost_limit=alternative_cost, return_cost=False, output="pairs"
+        ).astype(np.uint16)
 
     @staticmethod
-    def _csgraph(dist) -> np.ndarray:
+    def _csgraph(dist: sparray) -> np.ndarray:
         """Sparse solving with scipy (scipy.sparse.csgraph.min_weight_full_bipartite_matching).
 
         You should not call this method directly. To enforce using csgraph,
         rather set `sparse_implementation` attribute to "csgraph" and call `sparse_solve`.
 
+        Warning: This method modify inplace the input, if it contains negative values.
+
+        This backend supports rectangular (N != M) sparse matrices.
+
         Args:
-            dist (scipy.sparse.csr_matrix): Sparse dist matrix in the CSR format
-                Shape: (N, N), dtype: float
+            dist (sparray): Sparse dist matrix.
+                Shape: (N, M), dtype: float
 
         Returns:
             np.ndarray: Links (i, j)
@@ -379,21 +507,29 @@ class LapSolver:
         """
         import scipy.sparse.csgraph  # noqa: PLC0415
 
-        i, j = scipy.sparse.csgraph.min_weight_full_bipartite_matching(dist)
+        csr = dist.tocsr()
 
-        return np.array([i, j], np.uint16).transpose()
+        # Remove 0 value: scipy does not support it.
+        mini = csr.data.min()
+        if mini <= 0.0:
+            csr.data += 0.1 - mini
+
+        return np.stack(scipy.sparse.csgraph.min_weight_full_bipartite_matching(csr)).T.astype(np.uint16)
 
     @staticmethod
-    def _lapmod(dist) -> np.ndarray:
+    def _lapmod(dist: sparray) -> np.ndarray:
         """Sparse solving with lapmod from lap (https://github.com/gatagat/lap).
 
-        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx.
+        Note: We are now using the lapx distribution from https://github.com/rathaROG/lapx, which
+              provides the equivalent `lap.lapmod` method.
 
         You should not call this method directly. To enforce using lapmod,
         rather set `sparse_implementation` attribute to "lapmod" and call `sparse_solve`.
 
+        This backend only support square matrices.
+
         Args:
-            dist (scipy.sparse.csr_matrix): Sparse dist matrix in the CSR format
+            dist (sparray): Sparse dist matrix.
                 Shape: (N, N), dtype: float
 
         Returns:
@@ -402,18 +538,13 @@ class LapSolver:
         """
         import lap  # noqa: PLC0415
 
-        x: np.ndarray
+        if dist.shape[0] != dist.shape[1]:
+            # It only supports square matrices:
+            # 1. Only diag_split_sparse cost extension
+            # 2. Feasible rectangular matrices are not supported (no sparse shape extension)
+            raise ValueError(f"Lapmod only support squared matrix. Got {dist.shape}.")
 
-        _, x, _ = lap.lapmod(dist.shape[0], dist.data, dist.indptr, dist.indices)
+        csr = dist.tocsr()
 
-        # Note that -1 are returned by lap when no link is made
-        # In our case as we handle it ourselves, no -1 should be found
-        if (x == -1).any():
-            warnings.warn(
-                "-1 found in _lap. Should not occur except if you have called yourself the function.", stacklevel=2
-            )
-
-        i = np.arange(x.shape[0])[x != -1]
-        j = x[x != -1]
-
-        return np.array([i, j], dtype=np.uint16).transpose()
+        x, _ = lap.lapmod(csr.shape[0], csr.data, csr.indptr, csr.indices, return_cost=False)
+        return np.stack((np.arange(x.shape[0]), x)).T.astype(np.uint16)

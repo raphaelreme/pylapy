@@ -38,15 +38,28 @@ lap = [
     "lapx",  # Let's use lapx instead of lap (maintained)
 ]
 lapjv = [
-    "lapjv",  # Does not work on MacOS? to be moved to lapx?
+    "lapx",  # Let's use lapx instead of lap (maintained)
 ]
-lapsovler = [
+lapsolver = [
     "lapx",  # Let's use lapx instead of lapsolver (maintained)
 ]
-scipy = [
-    "scipy",  # Works everywhere
+laprust = [
+    "lapx",
 ]
-sparse = [
+scipy = [
+    "scipy",
+]
+lapmod = [
+    "lapx",
+    "numba",
+    "scipy",
+]
+csgraph = [
+    "numba",
+    "scipy",
+]
+all = [
+    "lapx",
     "scipy",
     "numba",
 ]
@@ -99,7 +112,6 @@ lint.ignore = [
     "D100",  # Module docstring
     "D107",  # __init__ docstring
     "EM", "TRY003",  # Let's rely on standard exceptions
-    "FBT",  # Ignore boolean trap
     "FIX", "TD",  # Ignore TODO, FIXME, XXX
     "CPY001",  # Copyright
 ]
@@ -123,8 +135,8 @@ lint.pydocstyle.convention = "google"
 lint.pylint.max-args = 8
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*.py" = ["INP001", "D103", "S101", "ANN201", "SLF001", "T201"]
-"benchmark/*.py" = ["INP001", "D103", "S101", "ANN201", "SLF001", "T201", "NPY002", "ERA001"]
+"tests/*.py" = ["INP001", "D103", "S101", "ANN201", "SLF001", "T201", "PLR2004"]
+"benchmark*/*.py" = ["INP001", "D103", "S101", "ANN201", "SLF001", "T201", "NPY002", "ERA001"]
 
 
 [tool.mypy]
