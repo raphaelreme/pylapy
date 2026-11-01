@@ -1,6 +1,7 @@
 """Cost Extension Benchmark: What is the best cost-extension strategy per backend?
 
-A soft threshold lets a row/column stay *unmatched* at cost ``eta``. Backends can't do that directly, so
+An alternative cost ``eta`` lets rows/columns stay *unmatched*, at cost ``eta / 2`` each
+(so ``eta`` per unmatched row on a square problem; see ``LapSolver``). Backends can't do that directly, so
 pylapy rewrites the cost matrix by adding "sink" rows/cols (a cost extension) -- or, for some backends,
 relies on a native ``cost_limit``. This compares pylapy's cost extensions (plus the native option when it
 exists) per backend.
@@ -14,8 +15,8 @@ extension is needed. We check every extension reaches the same soft objective as
 Results are written to JSON for ``plot_cost_extension.py``.
 
 Run:
-    uv run python -m benchmark_v2.benchmark_cost_extension
-    uv run python -m benchmark_v2.benchmark_cost_extension --sizes 5,10,50 --samples 2 --repeats 3
+    uv run python -m benchmark.benchmark_cost_extension
+    uv run python -m benchmark.benchmark_cost_extension --sizes 5,10,50 --samples 2 --repeats 3
 """
 
 from __future__ import annotations

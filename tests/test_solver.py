@@ -2,9 +2,10 @@
 
 The ``cost_limit`` / ``alternative_cost`` model (see ``LapSolver``):
 
-- ``alternative_cost`` is the former soft threshold ``eta``: a node may be left unmatched at that cost.
-  Its canonical objective is ``soft_objective`` (link cost + eta per unlinked row and column), invariant
-  across backends / extensions, so equivalence is asserted on that objective, never on exact link sets.
+- ``alternative_cost`` is the former soft threshold ``eta``: nodes may be left unmatched. Its canonical
+  objective is ``soft_objective`` (link cost + ``eta / 2`` per unlinked row and column, i.e. ``eta`` per
+  unlinked row on a square problem; see ``LapSolver``), invariant across backends / extensions, so
+  equivalence is asserted on that objective, never on exact link sets.
 - ``cost_limit`` is a hard discard: no returned link may cost more than it. There the invariant is the
   (maximum) number of links and their total cost, which we compare across backends.
 """

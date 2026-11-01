@@ -8,14 +8,15 @@ For every sparse backend we measure, across a size sweep, every sparse extension
 ``pylapy.sparse``), over the configs ``squareness in {0.9, 1.0, 1.1}`` x ``hard in {False, True}``. Matrices
 are always gated at ``eta`` (that is what makes them sparse) and always oriented to have fewer rows than
 columns (``enforce_small_row=True``). ``hard`` chooses hard thresholding (sink cost inf-like) vs an
-alternative cost (sink = ``eta``). Only ``diag_split_sparse`` is square, so ``lapmod`` skips the other two.
+alternative cost (sinks encode ``eta``: ``eta / 2`` per unmatched row/column; see ``LapSolver``). Only
+``diag_split_sparse`` is square, so ``lapmod`` skips the other two.
 We check every extension reaches the right (link-count, cost) against a scipy reference.
 
 Results are written to JSON for ``plot_sparse_extension.py``.
 
 Run:
-    uv run python -m benchmark_v2.benchmark_sparse_extension
-    uv run python -m benchmark_v2.benchmark_sparse_extension --sizes 5,10,50 --samples 2 --repeats 3
+    uv run python -m benchmark.benchmark_sparse_extension
+    uv run python -m benchmark.benchmark_sparse_extension --sizes 5,10,50 --samples 2 --repeats 3
 """
 
 from __future__ import annotations

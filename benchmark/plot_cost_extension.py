@@ -1,12 +1,12 @@
-"""Plot the results of :mod:`benchmark_v2.benchmark_cost_extension`.
+"""Plot the results of :mod:`benchmark.benchmark_cost_extension`.
 
 Reads the JSON results and writes PNGs under ``images/cost_extension/<data>/``:
 
 - ``<method>__sq<squareness>_gated<bool>.png`` - cost extensions compared, one config.
 
 Run:
-    uv run python -m benchmark_v2.plot_cost_extension
-    uv run python -m benchmark_v2.plot_cost_extension --data experimental
+    uv run python -m benchmark.plot_cost_extension
+    uv run python -m benchmark.plot_cost_extension --data experimental
 """
 
 from __future__ import annotations

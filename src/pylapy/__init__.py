@@ -24,7 +24,9 @@ Example:
     >>> dist = np.random.default_rng(0).random((2000, 1800))
     >>> solver = pylapy.LapSolver()  # auto-pick the fastest installed backend
     >>> links = solver.solve(dist)  # (L, 2) array of matched (row, col) pairs
-    >>> links = solver.solve(dist, alternative_cost=0.1)  # a node may stay unmatched at cost 0.1
+    >>> links = solver.solve(
+    ...     dist, alternative_cost=0.1
+    ... )  # leave unmatched rather than link with increase in global cost >= 0.1
     >>> links = solver.sparse_solve(dist, cost_limit=0.1)  # drop links above 0.1 and solve sparsely
     >>> cost = dist[links[:, 0], links[:, 1]].sum()
 

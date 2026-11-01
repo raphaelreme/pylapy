@@ -68,7 +68,7 @@ solver = pylapy.LapSolver()  # auto-pick the fastest installed backend
 
 links = solver.solve(dist)  # full assignment -> (L, 2) array of matched (row, col)
 links = solver.solve(dist, cost_limit=0.1)  # forbid links above 0.1
-links = solver.solve(dist, alternative_cost=0.1)  # a row/column may stay unmatched at cost 0.1
+links = solver.solve(dist, alternative_cost=0.1)  # leave unmatched rather than link with increase in global cost >= 0.1
 links = solver.sparse_solve(dist, cost_limit=0.1)  # same, solved sparsely (needs scipy + numba)
 
 cost = dist[links[:, 0], links[:, 1]].sum()
@@ -99,7 +99,8 @@ are then left **unlinked** and simply do not appear in the output. A node is lef
 
 Internally pylapy makes these cases solvable by rewriting the cost matrix (see *How it works*): `inf` /
 above-limit costs are replaced by a large finite sentinel, and an `alternative_cost` adds "sink"
-rows/columns priced at that cost. Any link the backend returns onto a sentinel value or a sink node is
+rows/columns priced to encode that cost (each unmatched row/column is worth $\eta/2$ — see *What
+`alternative_cost` costs exactly*). Any link the backend returns onto a sentinel value or a sink node is
 discarded before returning — which is exactly why those rows/columns come back unlinked.
 
 ## How it works
@@ -108,13 +109,41 @@ discarded before returning — which is exactly why those rows/columns come back
 
 - **`cost_limit`** — thresholds the distances. Any link with a cost above `cost_limit` is discarded; a node
   left with no admissible link stays unmatched.
-- **`alternative_cost`** — the cost of an *alternative "sink" link*, i.e. of leaving a row/column unmatched.
-  A node is matched only when its inclusion does not increase the global score by more than this limit. With
+- **`alternative_cost`** — the price of leaving nodes unmatched, via *alternative "sink" links*. A node is
+  matched only when its inclusion does not increase the global score by more than $\eta$. With
   `alternative_cost=inf` no alternative is offered (a node is left unmatched only when it has no admissible link).
 
 So `solve(dist)` is a plain full assignment, `solve(dist, cost_limit=eta)` keeps only links with cost
 $\le \eta$ (matching as many of the rest as possible), and `solve(dist, alternative_cost=eta)` lets a node
-stay unmatched at cost $\eta$.
+stay unmatched (see the exact objective just below).
+
+### What `alternative_cost` costs exactly
+
+One could read `alternative_cost` $=\eta$ as *"pay $\eta$ to leave one row (or column) unmatched"* —
+but that is not quite it. The objective pylapy actually minimizes is
+
+$$\min\ \underbrace{\sum_{(i,j)\,\in\,\text{links}} C_{i,j}}_{\text{cost of the chosen links}}
+\;+\; \frac{\eta}{2}\,\bigl(\#\text{unmatched rows} + \#\text{unmatched columns}\bigr)$$
+
+i.e. **each unmatched row and each unmatched column costs $\eta/2$** (not $\eta$). This is exactly what
+every cost/sparse *extension* encodes under the hood (the symmetric layouts spend $\eta/2$ on a row sink
+and $\eta/2$ on a column sink; the row-only layouts spend $\eta$ on the row and $0$ on the column — the two
+differ only by a constant, so they share the same optimum).
+
+What this means in practice, for an $N \times M$ matrix with $N \le M$ and $k$ chosen links (so $N-k$
+unmatched rows and $M-k$ unmatched columns):
+
+$$\frac{\eta}{2}\bigl((N-k) + (M-k)\bigr) \;=\; \underbrace{\eta\,(N-k)}_{\eta\text{ per unmatched row}}
+\;+\; \underbrace{\frac{\eta}{2}\,(M-N)}_{\text{constant}}$$
+
+- Every assignment leaving a row unmatched necessarily leaves a column unmatched too, so an unmatched *row*
+  effectively costs **$\eta$** (its own $\eta/2$ plus the $\eta/2$ of the column it frees). For a **square**
+  matrix ($N = M$) this is the whole story: **$\eta$ per unmatched row**.
+- When $M > N$ there are $M-N$ surplus columns that *can never* be matched; they add a fixed
+  $\tfrac{\eta}{2}(M-N)$ that every assignment pays regardless, so it does not affect which links are chosen.
+
+Equivalently (and this is the handy rule of thumb): a link of cost $d$ is kept only when $d < \eta$ —
+dropping it saves $d$ but costs $\eta/2 + \eta/2 = \eta$ for the row and the column it leaves unmatched.
 
 Backends that cannot take rectangular input or apply these natively are handled by **rewriting the cost
 matrix**: a *shape extension* pads it to a square matrix, a *cost extension* adds sink rows/columns, and a

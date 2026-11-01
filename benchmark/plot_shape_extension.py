@@ -1,12 +1,12 @@
-"""Plot the results of :mod:`benchmark_v2.benchmark_shape_extension`.
+"""Plot the results of :mod:`benchmark.benchmark_shape_extension`.
 
 Reads the JSON results and writes PNGs under ``images/shape_extension/<data>/``:
 
 - ``<method>__sq<squareness>_gated<bool>.png`` - extensions compared, one config.
 
 Run:
-    uv run python -m benchmark_v2.plot_shape_extension
-    uv run python -m benchmark_v2.plot_shape_extension --data experimental
+    uv run python -m benchmark.plot_shape_extension
+    uv run python -m benchmark.plot_shape_extension --data experimental
 """
 
 from __future__ import annotations

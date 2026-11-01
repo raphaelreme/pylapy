@@ -12,8 +12,8 @@ We also check every extension reaches the same assignment cost as a scipy refere
 Results are written to JSON for ``plot_shape_extension.py``.
 
 Run:
-    uv run python -m benchmark_v2.benchmark_shape_extension
-    uv run python -m benchmark_v2.benchmark_shape_extension --sizes 5,10,50 --samples 2 --repeats 3
+    uv run python -m benchmark.benchmark_shape_extension
+    uv run python -m benchmark.benchmark_shape_extension --sizes 5,10,50 --samples 2 --repeats 3
 """
 
 from __future__ import annotations

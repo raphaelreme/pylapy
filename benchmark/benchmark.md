@@ -15,13 +15,13 @@ to prefer overall (method comparison).
 uv sync --all-extras --dev
 
 # One study at a time: run the driver, then its plotter.
-uv run python -m benchmark_v2.benchmark_shape_extension   && uv run python -m benchmark_v2.plot_shape_extension
-uv run python -m benchmark_v2.benchmark_cost_extension    && uv run python -m benchmark_v2.plot_cost_extension
-uv run python -m benchmark_v2.benchmark_sparse_extension  && uv run python -m benchmark_v2.plot_sparse_extension
-uv run python -m benchmark_v2.benchmark_method_comparison && uv run python -m benchmark_v2.plot_method_comparison
+uv run python -m benchmark.benchmark_shape_extension   && uv run python -m benchmark.plot_shape_extension
+uv run python -m benchmark.benchmark_cost_extension    && uv run python -m benchmark.plot_cost_extension
+uv run python -m benchmark.benchmark_sparse_extension  && uv run python -m benchmark.plot_sparse_extension
+uv run python -m benchmark.benchmark_method_comparison && uv run python -m benchmark.plot_method_comparison
 ```
 
-Each driver writes a flat JSON to `results/` and each plotter writes PNGs to `images/<study>/<data>/`.
+Each driver writes a flat JSON to `results/` and each plotter writes SVGs to `images/<study>/<data>/`.
 The backends are wrapped directly in `methods.py` (`solve_scipy`, `solve_lap`, `solve_lapjv`,
 `solve_lapsolver`, `solve_laprust`, `solve_csgraph`, `solve_lapmod`).
 
@@ -58,9 +58,11 @@ inf-filled variants (`smallest_fill_inf`, `sum_*`) are slower **and** make `lapj
 
 ## 2. Cost extension — alternative cost (sink nodes)
 
-To leave a node unmatched at cost $\eta$, we add sink rows/columns. There are 11 equivalent layouts (plus
-`no_cost_extension`, i.e. the backend's native cost limit). They give the same optimum but differ in speed
-and robustness.
+To let nodes stay unmatched, we add sink rows/columns. The objective is
+$\sum \text{link costs} + \tfrac{\eta}{2}(\#\text{unmatched rows} + \#\text{unmatched columns})$ — each
+unmatched row/column costs $\eta/2$, i.e. $\eta$ per unmatched row on a square problem (see the README's
+*What `alternative_cost` costs exactly*). There are 11 equivalent layouts (plus `no_cost_extension`, i.e.
+the backend's native cost limit). They give the same optimum but differ in speed and robustness.
 
 **Findings.** `diag_row_pad_zero` is the fast, robust default for `scipy`, `lap` and `lapjv`
 (`fill_row_pad_zero` is on par with its diag counter part). `laprust` has a **native** cost limit and is fastest with

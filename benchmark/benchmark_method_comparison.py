@@ -15,8 +15,8 @@ Correctness: each method's ``(link count, achieved cost)`` is compared to a scip
 Results are written to JSON for ``plot_method_comparison.py``.
 
 Run:
-    uv run python -m benchmark_v2.benchmark_method_comparison
-    uv run python -m benchmark_v2.benchmark_method_comparison --sizes 5,10,50 --samples 2 --repeats 3
+    uv run python -m benchmark.benchmark_method_comparison
+    uv run python -m benchmark.benchmark_method_comparison --sizes 5,10,50 --samples 2 --repeats 3
 """
 
 from __future__ import annotations

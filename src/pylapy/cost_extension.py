@@ -1,9 +1,13 @@
 """Cost extension functions to add an alternative non-linking cost.
 
 A cost extension adds "sink" rows and columns to the distance matrix (also squaring it). Linking a true
-row/column to a sink means leaving it unassigned, at the alternative cost `eta`. This lets a node stay
-unmatched instead of being forced into an expensive link. The many layouts below are equivalent (they
-yield the same optimal links) but differ in runtime and numerical robustness.
+row/column to a sink means leaving it unassigned. The objective encoded is
+`sum(link costs) + eta / 2 * (#unmatched rows + #unmatched columns)`: each unmatched row and each
+unmatched column costs `eta / 2` (so `eta` per unmatched row on a square problem -- see `LapSolver`).
+This lets a node stay unmatched instead of being forced into an expensive link. The many layouts below
+are equivalent -- they yield the same optimal links (the symmetric layouts spend `eta / 2` on a row sink
+and `eta / 2` on a column sink; the row-/column-only layouts spend `eta` on one side and `0` on the
+other, differing only by a constant) -- but differ in runtime and numerical robustness.
 
 Which one to use (see the `benchmark_cost_extension.py` script and `DEFAULT_COST_EXTENSIONS`):
 
@@ -27,9 +31,9 @@ import numpy as np
 class CostExtensionProtocol(Protocol):
     """Callable that adds alternative-cost sink nodes to a distance matrix.
 
-    It receives the distance matrix, the alternative cost `eta` (the cost of leaving a node unmatched) and
-    the `inf` sentinel value, and returns a square extended matrix; links to sink nodes are stripped from
-    the result by the solver.
+    It receives the distance matrix, the alternative cost `eta` (each unmatched row/column then costs
+    `eta / 2`; see `LapSolver`) and the `inf` sentinel value, and returns a square extended matrix; links
+    to sink nodes are stripped from the result by the solver.
     """
 
     __name__: str
@@ -41,7 +45,7 @@ class CostExtensionProtocol(Protocol):
         /,
         inf: float = ...,
     ) -> np.ndarray:
-        """Return `dist` extended with sink rows/columns so a node can stay unmatched at cost `eta`."""
+        """Return `dist` extended with sink rows/columns so a node can stay unmatched (`eta / 2` each)."""
 
 
 def no_cost_extension(dist: np.ndarray, eta: float, inf: float = float("inf")) -> np.ndarray:  # noqa: ARG001

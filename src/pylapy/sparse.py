@@ -5,12 +5,13 @@ The sparse backends (`scipy.sparse.csgraph.min_weight_full_bipartite_matching` a
 sparse) distance matrix into a COO matrix by:
 
 1. dropping every entry above `cost_limit` (this is what makes it sparse / applies the threshold), and
-2. adding "sink" edges so a row/column can stay unmatched at `alternative_cost` -- which also guarantees a
-   feasible full matching (otherwise a row with no admissible link would break the backends).
+2. adding "sink" edges so a row/column can stay unmatched -- which also guarantees a feasible full
+   matching (otherwise a row with no admissible link would break the backends).
 
-`alternative_cost` sets whether a node may be left unmatched: a finite value adds an alternative sink link
-at that cost; `inf` offers no alternative (the sink is priced very high and used only as a last resort, to
-keep the problem feasible). Links to sink nodes are stripped from the result by `LapSolver`.
+`alternative_cost` sets whether a node may be left unmatched: a finite value adds alternative sink edges
+encoding the same objective as `LapSolver.solve` (each unmatched row/column costs `eta / 2`); `inf` offers
+no alternative (the sink is priced very high and used only as a last resort, to keep the problem feasible).
+Links to sink nodes are stripped from the result by `LapSolver`.
 
 Which one to use (see the `benchmark_sparse_extension.py` script and `DEFAULT_SPARSE_EXTENSIONS`):
 
@@ -42,8 +43,8 @@ class SparseExtensionProtocol(Protocol):
     """Callable that builds a gated COO cost matrix with alternative-cost sink edges.
 
     It receives a dense or sparse distance matrix and returns a `scipy.sparse.coo_array` holding the real
-    links (those with cost <= `cost_limit`) plus sink edges priced at `alternative_cost` (`inf` offers no
-    alternative).
+    links (those with cost <= `cost_limit`) plus sink edges encoding `alternative_cost` (`eta / 2` per
+    unmatched row/column; `inf` offers no alternative).
     """
 
     __name__: str
@@ -56,7 +57,7 @@ class SparseExtensionProtocol(Protocol):
         cost_limit: float = ...,
         alternative_cost: float = ...,
     ) -> sparray:
-        """Return a COO matrix: real links (cost <= `cost_limit`) plus sink edges at `alternative_cost`."""
+        """Return a COO matrix: real links (cost <= `cost_limit`) plus sink edges encoding `alternative_cost`."""
 
 
 def sparse_to_dense(sparse: sparray, inf: float = float("inf")) -> np.ndarray:
@@ -213,8 +214,9 @@ def diag_row_no_pad(
 
     Keeps the links with cost <= min(`cost_limit`, `alternative_cost`) and adds one row sink `(i, m + i)`
     per row, priced at `alternative_cost` (or `sum(costs) + 1` when `alternative_cost=inf`, i.e. no
-    alternative). Only rows get a sink (columns may be left unmatched for free), which matches the usual
-    alternative-cost objective.
+    alternative). Only rows get a sink (columns may be left unmatched for free): this matches the usual
+    `eta / 2`-per-unmatched-row/column objective up to a constant (it spends `eta` on the row and `0` on
+    the column rather than `eta / 2` on each), so it shares the same optimum.
 
     The fastest layout for `csgraph`. Not square, so `lapmod` cannot use it.
 

@@ -1,9 +1,10 @@
 """Unit tests for the cost extension functions.
 
 Each function rewrites an ``(n, m)`` distance matrix into an ``(n + m, n + m)`` square one with "sink"
-rows/columns encoding the alternative (non-linking) cost ``eta`` -- except ``no_cost_extension``, which
-returns the matrix untouched for backends that apply the alternative cost natively. These tests assert the
-exact resulting matrix.
+rows/columns encoding the alternative (non-linking) cost ``eta`` (``eta / 2`` per unmatched row/column for
+the symmetric layouts; see ``LapSolver``) -- except ``no_cost_extension``, which returns the matrix
+untouched for backends that apply the alternative cost natively. These tests assert the exact resulting
+matrix.
 """
 
 import numpy as np

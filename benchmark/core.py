@@ -1,11 +1,11 @@
-"""Shared helpers for the pylapy ``benchmark_v2`` studies.
+"""Shared helpers for the pylapy ``benchmark`` studies.
 
 Timing, problem-instance construction, JSON IO, and a generic runtime-vs-size plotting helper.
 Every study (shape extension, cost extension, method comparison) builds on this module so the
 timing/averaging/plotting is identical and early-stop bookkeeping stays consistent.
 
-Nothing here imports ``pylapy``: the whole point of ``benchmark_v2`` is to measure the raw LAP
-backends (via :mod:`benchmark_v2.methods`) so the results can *decide* pylapy's own defaults.
+Nothing here imports ``pylapy``: the whole point of ``benchmark`` is to measure the raw LAP
+backends (via :mod:`benchmark.methods`) so the results can *decide* pylapy's own defaults.
 """
 
 from __future__ import annotations
@@ -79,15 +79,15 @@ def achieved_cost(matrix: np.ndarray, links: np.ndarray) -> float:
 
 
 def soft_objective(dist: np.ndarray, links: np.ndarray, eta: float) -> float:
-    """Soft-threshold objective: made-link costs + ``eta`` per unmatched row and per unmatched column.
+    """Soft-threshold objective: made-link costs + ``eta / 2`` per unmatched row and per unmatched column.
 
-    Invariant across every equivalent cost extension (they all return the same optimal "link iff
-    ``dist <= eta``" set), so it is the correctness check for the cost-extension study. Mirrors
-    ``tests/conftest.py::soft_objective``.
+    (So ``eta`` per unmatched row on a square problem; see ``LapSolver``.) Invariant across every
+    equivalent cost extension (they all return the same optimal "link iff ``dist <= eta``" set), so it is
+    the correctness check for the cost-extension study. Mirrors ``tests/conftest.py::soft_objective``.
     """
     n, m = dist.shape
     linked = len(links)
-    return achieved_cost(dist, links) + eta * ((n - linked) + (m - linked))
+    return achieved_cost(dist, links) + eta / 2 * ((n - linked) + (m - linked))
 
 
 def time_callable(fn: Callable[[], np.ndarray], repeats: int) -> tuple[float, float, np.ndarray]:

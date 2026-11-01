@@ -1,4 +1,4 @@
-"""Plot the results of :mod:`benchmark_v2.benchmark_method_comparison`.
+"""Plot the results of :mod:`benchmark.benchmark_method_comparison`.
 
 Reads the JSON results and writes one PNG **per config** under ``images/method_comparison/<data>/``, each
 overlaying every method's runtime-vs-``n`` curve:
@@ -6,8 +6,8 @@ overlaying every method's runtime-vs-``n`` curve:
 - ``<config>_sq<squareness>.png`` - all methods compared, one (cost config, squareness).
 
 Run:
-    uv run python -m benchmark_v2.plot_method_comparison
-    uv run python -m benchmark_v2.plot_method_comparison --data experimental
+    uv run python -m benchmark.plot_method_comparison
+    uv run python -m benchmark.plot_method_comparison --data experimental
 """
 
 from __future__ import annotations
