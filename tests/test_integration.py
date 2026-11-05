@@ -9,10 +9,10 @@ Two things are verified:
    swapping the extension (or the backend) leaves the optimal objective unchanged. We compare
    objectives, not exact link sets, because several assignments can be equally optimal.
 
-``lapjv`` is deliberately excluded from the shape-extension equivalence test: it mishandles large
-inf-filled shape extensions (``smallest_fill_inf`` / ``sum_fill_inf`` / ``sum_split_inf``). This is a
-backend numerical limitation, not an extension-logic issue (all other backends stay equivalent), and is
-tracked for later investigation.
+``lapjv`` used to be excluded from the shape-extension equivalence test because it mishandled large
+inf-filled shape extensions (``smallest_fill_inf`` / ``sum_fill_inf`` / ``sum_split_inf``). That was a
+floating-point precision bug in the backend, fixed in ``lapx`` >= 0.13, so all dense backends are now
+exercised.
 """
 
 import numpy as np
@@ -38,9 +38,6 @@ SPARSE_EXTENSIONS = ["diag_split_sparse", "diag_row_no_pad", "diag_col_no_pad"]
 # Backends that apply the alternative cost natively (can use `no_cost_extension`); the others raise on a
 # finite alternative_cost without an explicit extension.
 NATIVE_ALTERNATIVE_COST = {"lap", "laprust"}
-
-# lapjv is unreliable on inf-filled shape extensions at scale (see module docstring).
-SHAPE_EQUIVALENCE_BACKENDS = [b for b in DENSE_BACKENDS if b != "lapjv"]
 
 SQUARE = (100, 100)
 RECTANGULAR = [(80, 120), (120, 80)]
@@ -106,12 +103,12 @@ def test_cost_extensions_are_equivalent(extension, backend: str, shape: tuple[in
 
 
 # --------------------------------------------------------------------------------------------------
-# Equivalence of all shape extensions, across all backends (except lapjv, see module docstring)
+# Equivalence of all shape extensions, across all dense backends
 # --------------------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("shape", RECTANGULAR)
-@pytest.mark.parametrize("backend", SHAPE_EQUIVALENCE_BACKENDS)
+@pytest.mark.parametrize("backend", DENSE_BACKENDS)
 @pytest.mark.parametrize("extension", SHAPE_EXTENSIONS, ids=lambda f: f.__name__)
 def test_shape_extensions_are_equivalent(extension, backend: str, shape: tuple[int, int]) -> None:
     dist = make_problem(shape, seed=4)
@@ -121,7 +118,7 @@ def test_shape_extensions_are_equivalent(extension, backend: str, shape: tuple[i
     solver.shape_extension = extension
     links = solver.solve(dist)
 
-    reference = LapSolver(SHAPE_EQUIVALENCE_BACKENDS[0]).solve(dist)
+    reference = LapSolver(DENSE_BACKENDS[0]).solve(dist)
 
     assert_valid_links(links, n, m)
     assert len(links) == min(n, m)

@@ -91,12 +91,14 @@ class LapSolver:
 
     - `laprust` is the best general-purpose default: fastest (or tied) both for plain assignment and with
       an alternative cost (its native cost limit avoids any dense rewrite).
-    - Its one weak spot is a dense problem that only sets a cost limit (`alternative_cost=inf`), where it
-      degrades at scale. For such discarded-link / sparse problems prefer a sparse backend (`csgraph` or
-      `lapmod`); `scipy` is a decent dense fallback.
-    - `lap` and `scipy` are competitive for plain assignment but much slower once a cost extension
-      is involved; `lapsolver` is consistently the slowest; `lapjv` is slow and can return wrong
-      assignments on cost-limited / inf-heavy problems.
+    - Its one weak spot is a *square* dense problem that only sets a cost limit (`alternative_cost=inf`),
+      where it still degrades at scale (lapx >= 0.13 fixed the rectangular case). For such
+      discarded-link / sparse problems prefer a sparse backend (`csgraph` or `lapmod`); `scipy` is a
+      decent dense fallback.
+    - `lap`, `lapjv` and `scipy` are competitive for plain assignment but much slower once a cost extension
+      is involved; `lapsolver` is consistently slow on thresholded problems; `lapjv` historical
+      slightly-sub-optimal costs on inf-heavy problems were a floating-point precision bug, fixed in
+      lapx >= 0.13 (still present in src-d/lapjv).
     - Sparse backends carry a small constant overhead, so they only pay off from a few hundred nodes up.
 
     Attributes:
@@ -121,8 +123,8 @@ class LapSolver:
         "laprust": "lap",
         "lap": "lap",
         "scipy": "scipy.optimize",
+        "lapjv": "lap",  # Redundant with `lap` (old unreliability fixed in lapx >= 0.13).
         "lapsolver": "lap",  # The slowest option
-        "lapjv": "lap",  # Let's put lapjv last: it is unreliable.
     }
     sparse_implementations: ClassVar = {
         "lapmod": "lap",

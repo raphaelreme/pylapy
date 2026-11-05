@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-11-05
+
+Documentation and dependency refresh reflecting `lapx` 0.13.
+
+### Changed
+
+- **Require `lapx` >= 0.13** for every backend extra (`lap`, `lapjv`, `lapsolver`,
+  `laprust`, `lapmod`, `all`).
+
+### Fixed (upstream, via `lapx` 0.13)
+
+- **`lapjv` reliability.** The non-optimal links `lapjv` could return on inf-heavy /
+  inf-filled problems were a floating-point precision bug in its internal cost
+  comparisons; `lapx` 0.13 fixes it (`src-d/lapjv` still has it). `lapjv` is now
+  exercised by the shape-extension equivalence test again. A genuinely extreme `inf`
+  sentinel can still lose precision on any `lapx` backend (`scipy` is the most robust),
+  but pylapy's default sentinel stays small enough that normal use is unaffected.
+- **`laprust` cost-limited slowness** is now limited to *square* problems; the
+  rectangular-gated degradation is gone. Prefer a sparse backend for a square,
+  cost-limited problem at scale.
+
+### Docs
+
+- Refreshed the benchmark numbers/narrative and the per-backend notes (README,
+  `benchmark/benchmark.md`, source docstrings) for the two fixes above.
+
 ## [1.2.0] - 2026-10-28
 
 Large refactor and upgrade of the code base, with a unified, clearer solving

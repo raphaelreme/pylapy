@@ -17,8 +17,11 @@ Which one to use (see the `benchmark_cost_extension.py` script and `DEFAULT_COST
   twin is equivalent and roughly as fast).
 - `lapsolver`: the `diag_split_sparse` is best.
 
-Avoid the `*_pad_inf` variants with `lapjv`: they are slower and make that backend return wrong
-assignments (it seems to mishandle the inf sentinel). The `*_pad_zero` variants are safe everywhere.
+Prefer the `*_pad_zero` variants over the `*_pad_inf` ones: they are faster and safe everywhere.
+Historically `inf` filled variants made the `lapjv` backend return wrong assignments because of a floating-point
+precision bug in its cost comparisons, fixed in `lapx` >= 0.13, still present in `src-d/lapjv`. A genuinely extreme
+sentinel can still lose precision on any backend (except `scipy` and `laprust` that are robust to this).
+pylapy never reaches extreme enough `inf` sentinel values (tested up to n=10^5) to trigger this precision loss.
 
 Each function follows `CostExtensionProtocol` and is registered by name in `COST_EXTENSIONS`.
 """

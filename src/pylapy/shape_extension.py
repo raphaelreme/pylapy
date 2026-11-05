@@ -9,10 +9,13 @@ Which one to use (see the `benchmark_shape_extension.py` script):
 - Every backend we ship (through `lapx`) now handles rectangular input natively, and that internal path
   (`no_shape_extension`) is on par with or faster than any explicit padding. It is therefore the default
   for every backend (see `DEFAULT_SHAPE_EXTENSIONS`).
-- If you must pad explicitly, `smallest_fill_zero` (pad the smaller side with 0) is the fastest and the
-  only safe choice. The inf-filled variants (`smallest_fill_inf`, `sum_fill_inf`, `sum_split_inf`,
-  `sum_row_inf`, `sum_col_inf`) are slower and, worse, make the `lapjv` backend return wrong
-  assignments (they mishandle the large inf sentinel). Prefer 0-padding, or let the backend handle it.
+- If you must pad explicitly, `smallest_fill_zero` (pad the smaller side with 0) is usually the fastest choice.
+  Its inf counterpart (`smallest_fill_inf`) can be fastest for gated rectangular problems with `lap` and `lapjv`
+  backends. The `sum_*` variants are only slower, because of their larger (n + m > max(n, m)) extensions.
+- Historically `inf` filled variants made the `lapjv` backend return wrong assignments because of a floating-point
+  precision bug in its cost comparisons, fixed in `lapx` >= 0.13, still present in `src-d/lapjv`. A genuinely extreme
+  sentinel can still lose precision on any backend (except `scipy` and `laprust` that are robust to this).
+  pylapy never reaches extreme enough `inf` sentinel values (tested up to n=10^5) to trigger this precision loss.
 
 Each function follows `ShapeExtensionProtocol` and is registered by name in `SHAPE_EXTENSIONS`.
 """
@@ -80,8 +83,11 @@ def smallest_fill_inf(dist: np.ndarray, inf: float = np.inf) -> np.ndarray:
 
     dist -> |dist, inf| or |dist.T, inf|.T
 
-    Slower than `smallest_fill_zero` and unsafe with the `lapjv` backend, which returns wrong
-    assignments when the padding holds the large inf sentinel. Prefer `smallest_fill_zero`.
+    Slower than `smallest_fill_zero`; prefer `smallest_fill_zero`. (Historically unsafe with the `lapjv`
+    backend when the padding held the large inf sentinel -- a floating-point precision bug fixed in
+    `lapx` >= 0.13; see the module docstring.)
+
+    Note that for gated rectangular matrices, it is the fastest choice for lap & lapjv.
 
     This was the option implemented in lap v0.4.0.
 
@@ -108,8 +114,9 @@ def sum_fill_inf(dist: np.ndarray, inf: float = np.inf) -> np.ndarray:
     dist -> | dist, inf |
             | inf , inf |
 
-    Inefficient, and unsafe with the `lapjv` backend (it mishandles the inf sentinel);
-    prefer the `smallest_fill_*` variants.
+    Inefficient; prefer the `smallest_fill_*` variants. (Historically unsafe with the `lapjv` backend on
+    the large inf sentinel -- a floating-point precision bug fixed in `lapx` >= 0.13; see the module
+    docstring.)
 
     Args:
         dist (np.ndarray): Distance matrix to extend
@@ -134,8 +141,9 @@ def sum_split_inf(dist: np.ndarray, inf: float = np.inf) -> np.ndarray:
     dist -> | dist, inf |
             | inf ,  0  |
 
-    Inefficient, and unsafe with the `lapjv` backend (it mishandles the inf sentinel);
-    prefer the `smallest_fill_*` variants.
+    Inefficient; prefer the `smallest_fill_*` variants. (Historically unsafe with the `lapjv` backend on
+    the large inf sentinel -- a floating-point precision bug fixed in `lapx` >= 0.13; see the module
+    docstring.)
     This was the option implemented in lap v0.5.0.
 
     Args:
@@ -162,8 +170,9 @@ def sum_row_inf(dist: np.ndarray, inf: float = np.inf) -> np.ndarray:
     dist -> | dist, inf |
             |  0  ,  0  |
 
-    Inefficient, and unsafe with the `lapjv` backend (it mishandles the inf sentinel);
-    prefer the `smallest_fill_*` variants.
+    Inefficient; prefer the `smallest_fill_*` variants. (Historically unsafe with the `lapjv` backend on
+    the large inf sentinel -- a floating-point precision bug fixed in `lapx` >= 0.13; see the module
+    docstring.)
 
     Args:
         dist (np.ndarray): Distance matrix to extend
@@ -189,8 +198,9 @@ def sum_col_inf(dist: np.ndarray, inf: float = np.inf) -> np.ndarray:
     dist -> | dist, 0 |
             | inf , 0 |
 
-    Inefficient, and unsafe with the `lapjv` backend (it mishandles the inf sentinel);
-    prefer the `smallest_fill_*` variants.
+    Inefficient; prefer the `smallest_fill_*` variants. (Historically unsafe with the `lapjv` backend on
+    the large inf sentinel -- a floating-point precision bug fixed in `lapx` >= 0.13; see the module
+    docstring.)
 
     Args:
         dist (np.ndarray): Distance matrix to extend

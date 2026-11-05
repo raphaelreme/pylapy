@@ -210,9 +210,10 @@ Full methodology, plots and per-backend findings live in **[benchmark/benchmark.
 In short, on synthetic point-matching data:
 
 - For a **plain assignment**, `laprust` is the best general-purpose dense default (fastest or tied), with
-  `scipy` and `lap` close behind and `lapsolver` the slowest.
+  `scipy` close behind. `lap` / `lapjv` are fast on rectangular problems, but slower on square ones. `lapsolver` is usually slowest.
 - When you **threshold** (a cost limit or an alternative cost), the **sparse** backends
   (`csgraph`, `lapmod`) are usually more efficient than a dense solve — often one order of magnitude.
+  `laprust` is an exception, it outperforms sparse backends almost everywhere except square gated (`alternative_cost=inf`) problems.
 
 | plain assignment | `cost_limit` only | `alternative cost` |
 | --- | --- | --- |
@@ -221,7 +222,7 @@ In short, on synthetic point-matching data:
 (Measured on a single machine with synthetic data — treat as guidance, not absolute truth; benchmark your
 own problem if performance is critical.)
 
-Warning: We found that lapjv (both from lapx and src-d/lapjv) backend was unreliable and may return non-optimal links in some specific case. We advise to avoid this solver.
+Note on precision: `lapjv` used to return non-optimal links in some cases — a floating-point precision bug in its internal cost comparisons (true costs vs. the large `inf` sentinel). This is **fixed in `lapx` >= 0.13** (still present in `src-d/lapjv`). A genuinely extreme sentinel can still lose precision on any backend (except `scipy` and `laprust` that are robust to this). Pylapy never reaches extreme enough `inf` sentinel values (tested up to n=10^5) to trigger this precision loss. Even so, `lapjv` is slower than `laprust` with no real upside, so it is not the recommended backend (it is roughly equivalent to `lap` across all considered scenarios).
 
 ## References
 

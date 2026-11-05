@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "pylapy"
-version = "1.2.0"
+version = "1.2.1"
 description = "Pythonic wrapper around Linear Assignement Problem solvers"
 readme = "README.md"
 authors = [
@@ -35,22 +35,22 @@ dependencies = [
 
 [project.optional-dependencies]
 lap = [
-    "lapx",  # Let's use lapx instead of lap (maintained)
+    "lapx>=0.13",  # Let's use lapx instead of lap (maintained)
 ]
 lapjv = [
-    "lapx",  # Let's use lapx instead of lap (maintained)
+    "lapx>=0.13",  # Let's use lapx instead of lap (maintained)
 ]
 lapsolver = [
-    "lapx",  # Let's use lapx instead of lapsolver (maintained)
+    "lapx>=0.13",  # Let's use lapx instead of lapsolver (maintained)
 ]
 laprust = [
-    "lapx",
+    "lapx>=0.13",
 ]
 scipy = [
     "scipy",
 ]
 lapmod = [
-    "lapx",
+    "lapx>=0.13",
     "numba",
     "scipy",
 ]
@@ -67,7 +67,7 @@ sparse = [
     "scipy",
 ]
 all = [
-    "lapx",
+    "lapx>=0.13",
     "scipy",
     "numba",
 ]

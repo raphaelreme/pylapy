@@ -48,9 +48,13 @@ handle it), the two `smallest_fill_*` paddings and the four `sum_*` paddings.
 
 **Findings.** Every backend now accepts rectangular input natively (via lapx / scipy), and that internal path
 (`no_shape_extension`) is on par with or faster than any explicit padding — so it is the default everywhere.
-If you must pad explicitly, `smallest_fill_zero` (0-fill) is the fastest and the **only safe** choice: the
-inf-filled variants (`smallest_fill_inf`, `sum_*`) are slower **and** make `lapjv` return *wrong* assignments
-(it mishandles the large inf sentinel).
+If you must pad explicitly, `smallest_fill_zero` (0-fill) is usually the fastest choice; its inf counterpart
+(`smallest_fill_inf`) can be fastest for gated rectangular problems with `lap` and `lapjv` backends.
+The `sum_*` variants are only slower, because of their larger ($n + m > \max(n, m)$) extensions.
+Note that all inf-filled variants used to make `lapjv` return *wrong* assignments — a floating-point precision
+bug fixed in `lapx` >= 0.13; it is now equivalent to the other backends.
+A genuinely extreme sentinel can still lose precision on any backend (except `scipy` and `laprust` that are robust to this).
+pylapy never reaches extreme enough `inf` sentinel values (tested up to n=10^5) to trigger this precision loss.
 
 | laprust | scipy |
 | --- | --- |
@@ -66,8 +70,9 @@ the backend's native cost limit). They give the same optimum but differ in speed
 
 **Findings.** `diag_row_pad_zero` is the fast, robust default for `scipy`, `lap` and `lapjv`
 (`fill_row_pad_zero` is on par with its diag counter part). `laprust` has a **native** cost limit and is fastest with
-`no_cost_extension` — by a wide margin. `lapsolver` prefers the split layouts (`diag_split_sparse`). Avoid
-the `*_pad_inf` variants with `lapjv`: they are slower and make it return wrong assignments.
+`no_cost_extension` — by a wide margin. `lapsolver` prefers the split layouts (`diag_split_sparse`). Prefer
+the `*_pad_zero` variants over the `*_pad_inf` ones: they are faster (the `*_pad_inf` layouts used to make
+`lapjv` return wrong assignments too — a floating-point precision bug fixed in `lapx` >= 0.13).
 
 | laprust (native wins) | scipy (`diag_row_pad_zero`) |
 | --- | --- |
@@ -96,22 +101,25 @@ three shapes:
 - **alternative** — an alternative cost,
 - **gated_alternative** — gated + alternative cost.
 
-**Findings (at $n = 1000$, the reliable range).**
+**Findings (at $n = 1000$; numbers are for the square $s = 1.0$ case plotted below, with notable
+shape-dependent flips called out).**
 
-- **full**: `laprust` is fastest (~6 ms), then `scipy` (~12 ms), with `lap`/`lapjv` behind (~50 ms) and
-  `lapsolver` the slowest (~135 ms); any dense backend is fine.
-- **alternative**: `laprust` (~1.3 ms) and the sparse backends (`lapmod`/`csgraph`, ~3.5 ms) dominate; the
+- **full**: `laprust` is fastest (~12 ms), then `scipy` (~20 ms) and `lapsolver` (~30 ms), with `lap`/`lapjv`
+  far behind (~160–170 ms). The ranking flips with shape: on rectangular problems ($s = 0.9$ / $1.1$)
+  `lap`/`lapjv` drop to ~3–4 ms while `lapsolver` becomes the slowest (~160–220 ms). `laprust` is fastest
+  throughout.
+- **alternative**: `laprust` (~1.3 ms) and the sparse backends (`lapmod`/`csgraph`, ~3 ms) dominate; the
   other dense backends (`lap`/`lapjv` ~13 ms, `scipy` ~21 ms) are ~5–15× slower, and `lapsolver`
-  is far worse (~0.6 s).
-- **gated** (cost limit, no alternative): the sparse backends win big (`csgraph`/`lapmod` ~4–5 ms, `scipy`
-  ~5.5 ms) while `laprust`/`lap`/`lapjv` degrade badly at scale (~150–220 ms). We note that a non-default
-  shape extension (e.g. `smalless_fill_inf`) may avoid this degradation specifically for gated rectangular problems.
-- `lapsolver` is the slowest across the board on thresholded problems; `lapjv` can also return slightly
-  sub-optimal costs there.
+  is far worse (~0.1–0.6 s).
+- **gated** (cost limit, no alternative): the sparse backends win (`csgraph`/`lapmod` ~3–5 ms, `scipy`
+  ~4–7 ms). `laprust` is now fast on **rectangular** gated problems (~2–3 ms; `lapx` 0.13 fixed its old
+  degradation there) but **still degrades on square gated matrices at scale** (~9 ms at $n = 1000$, ~1.4 s by
+  $n = 5000$) — use a sparse backend for those. `lap`/`lapjv` degrade badly across all shapes (~115–320 ms).
+- `lapsolver` is the slowest across the board on thresholded problems.
 
 **Recommendation.** Use `laprust` as the dense default (great for plain assignment and for an alternative
 cost via its native limit); use `sparse_solve` (`csgraph` or `lapmod`) whenever the problem is thresholded
-or sparse.
+or sparse — and in particular for a **square** cost-limited problem, where `laprust` still degrades at scale.
 
 ### full
 | $s = 0.9$ | $s = 1.0$ | $s = 1.1$ |
